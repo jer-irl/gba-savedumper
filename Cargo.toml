@@ -1,0 +1,13 @@
+[package]
+name = "asteroids-gba"
+version = "0.1.0"
+authors = ["Jeremy Schroeder <jpschroeder2014@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+cargo-post = "0.1.6"
+gbafix = "1.0.4"
+
+[dependencies]
