@@ -1,33 +1,53 @@
+OUTPUT_FORMAT("elf32-littlearm", "elf32-bigarm", "elf32-littlearm")
+OUTPUT_ARCH(arm)
+
 ENTRY(_start)
 
-MEMORY {
-    ewram (w!x) : ORIGIN = 0x02000000, LENGTH = 256K
-    iwram (w!x) : ORIGIN = 0x03000000, LENGTH = 32K
-    rom (rx) : ORIGIN = 0x08000000, LENGTH = 32M
+MEMORY
+{
+    ROM    : ORIGIN = 0x08000000, LENGTH = 32M
+    EWRAM  : ORIGIN = 0x02000000, LENGTH = 256K
+    IWRAM  : ORIGIN = 0x03000000, LENGTH = 32K
 }
 
-SECTIONS {
+
+SECTIONS
+{
     .text : {
-        *(.entry)
-        *(.text .text.*);
-        . = ALIGN(4);
-    } >rom =0xff
+        KEEP(build/entry.o(.text.entry))
+        KEEP(build/header.o(.header))
+        *(.text .text.*)
+        . = ALIGN(4); 
+    } > ROM
 
-    .rodata : {
-        *(.rodata .rodata.*);
-        . = ALIGN(4);
-    } >rom = 0xff
+    .rodata : { 
+        *(.rodata .rodata.*); 
+        . = ALIGN(4); 
+    } > ROM
 
-    .data : {
-        *(.data .data.*);
+    .data : { 
+        _sidata = LOADADDR(.data);
         . = ALIGN(4);
-    } >iwram AT>rom = 0xff
+        _sdata = .;
+
+        *(.data);
+
+        . = ALIGN(4);
+        _edata = .; 
+    } > IWRAM AT > ROM
 
     .bss : {
-        *(.bss .bss.*);
         . = ALIGN(4);
-    } >iwram
+        _sbss = .;
 
-    /* discard anything not already mentioned */
-    /DISCARD/ : { *(*) }
+        *(.bss); 
+
+        . = ALIGN(4); 
+        _ebss = .;
+    } > IWRAM
+
+    /DISCARD/ :
+    {
+        *(.ARM.exidx .ARM.exidx.*);
+    }
 }
