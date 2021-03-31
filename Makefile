@@ -42,9 +42,12 @@ $(CC_OBJECTS): $(BUILD)/%.o: src/%.c
 $(AS_OBJECTS): $(BUILD)/%.o: src/%.S
 	$(AS) -o $@ $(ASFLAGS) $<
 
-
+dockerbuild:
+	docker build --tag asteroids-gba/build --file docker/Dockerfile.build docker
+	docker run --rm --mount type=bind,src=$(shell pwd),dst=/project asteroids-gba/build
 
 
 .PHONY: clean
 clean:
-	rm $(OBJECTS) $(TARGET)
+	rm -rf $(BUILD)
+	docker rmi asteroids-gba/build
