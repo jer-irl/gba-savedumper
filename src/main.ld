@@ -1,0 +1,48 @@
+OUTPUT_FORMAT("elf32-littlearm", "elf32-bigarm", "elf32-littlearm")
+OUTPUT_ARCH(arm)
+
+ENTRY(_start)
+
+MEMORY {
+    ROM    : ORIGIN = 0x08000000, LENGTH = 32M
+    EWRAM  : ORIGIN = 0x02000000, LENGTH = 256K
+    IWRAM  : ORIGIN = 0x03000000, LENGTH = 32K
+}
+
+SECTIONS {
+    .text : {
+        *(.text .text.rom)
+    } >ROM
+
+    .rodata : { 
+        *(.rodata .rodata.rom); 
+    } >ROM
+
+    .text.ram : {
+        *(.text.ram)
+    } >EWRAM AT>ROM
+    _ramtext_vma_begin = ADDR(.text.ram);
+    _ramtext_vma_end = ADDR(.text.ram) + SIZEOF(.text.ram);
+    _ramtext_lma_begin = LOADADDR(.text.ram);
+    _ramtext_lma_end = LOADADDR(.text.ram) + SIZEOF(.text.ram);
+
+    .rodata.ram : { 
+        KEEP(*(.rodata.ram))
+    } >EWRAM AT>ROM
+    _ramrodata_vma_begin = ADDR(.rodata.ram);
+    _ramrodata_vma_end = ADDR(.rodata.ram) + SIZEOF(.rodata.ram);
+    _ramrodata_lma_begin = LOADADDR(.rodata.ram);
+    _ramrodata_lma_end = LOADADDR(.rodata.ram) + SIZEOF(.rodata.ram);
+
+    .data : { 
+        *(.data);
+    } >IWRAM AT>ROM
+
+    .bss : {
+        *(.bss); 
+    } >IWRAM
+
+    /DISCARD/ : {
+        *(.ARM.exidx .ARM.exidx.*);
+    }
+}
