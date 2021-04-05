@@ -12,14 +12,17 @@ MEMORY {
 SECTIONS {
     .text : {
         *(.text .text.rom)
+        . = ALIGN(4);
     } >ROM
 
     .rodata : { 
         *(.rodata .rodata.rom); 
+        . = ALIGN(4);
     } >ROM
 
     .text.ram : {
         *(.text.ram)
+        . = ALIGN(4);
     } >EWRAM AT>ROM
     _ramtext_vma_begin = ADDR(.text.ram);
     _ramtext_vma_end = ADDR(.text.ram) + SIZEOF(.text.ram);
@@ -28,6 +31,7 @@ SECTIONS {
 
     .rodata.ram : { 
         KEEP(*(.rodata.ram))
+        . = ALIGN(4);
     } >EWRAM AT>ROM
     _ramrodata_vma_begin = ADDR(.rodata.ram);
     _ramrodata_vma_end = ADDR(.rodata.ram) + SIZEOF(.rodata.ram);
@@ -36,10 +40,12 @@ SECTIONS {
 
     .data : { 
         *(.data);
+        . = ALIGN(4);
     } >IWRAM AT>ROM
 
     .bss : {
         *(.bss); 
+        . = ALIGN(4);
     } >IWRAM
 
     /DISCARD/ : {

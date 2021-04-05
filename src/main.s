@@ -1,5 +1,5 @@
 .cpu arm7tdmi
-.syntax unified
+@.syntax unified
 
 .section .text.rom
 
@@ -12,28 +12,9 @@
 .set MGBA_LOG_ERROR, 1
 
 
-.if MGBA_LOG_ENABLE
-.macro mgba_log str_begin_label, str_end_label
-    push {r0, r1, r2, lr}
-    ldr r0, \str_begin_label
-    ldr r1, =$MGBA_LOG_STRING
-    ldr r2, \str_end_label - \str_begin_label
-    mov lr, pc
-    bx rom_memcpy16
-
-    ldr r0, =$MGBA_LOG_REG_FLAGS
-    str $MGBA_LOG_ERROR | 0x100, [r0]
-    pop {r0, r1, r2, lr}
-.endm
-.else
-.macro mgba_log str_begin_label, str_end_label
-.endm
-.endif
-
 .global _start
 _start:
     b init
-
 
 header:
     @ Nintendo logo; 156 bytes
@@ -66,6 +47,12 @@ header:
     .zero 2                 @ Reserved
 end_header:
 
+@ Fool mgba MB detection
+.word 0xEA000000 @ b 0
+
+.align
+.asciz "FLASH1M_Vnnn"
+.align
 
 .set IRQ_MODE, 0x12
 .set SYS_MODE, 0x1F
@@ -87,22 +74,6 @@ init:
     strh r0, [r1]
     .endif
 
-    @mbga_log hello_msg_start, hello_msg_end
-    @
-    push {r0, r1, r2, lr}
-    ldr r0, =hello_msg_start
-    ldr r1, =$MGBA_LOG_STRING
-    .set mgba_msg_len, hello_msg_end - hello_msg_start
-    ldr r2, =$mgba_msg_len
-    ldr r0, =rom_memcpy16
-    mov lr, pc
-    bx r0
-
-    ldr r0, =$MGBA_LOG_REG_FLAGS
-    ldr r1, =$MGBA_LOG_ERROR | 0x100
-    strh r1, [r0]
-    pop {r0, r1, r2, lr}
-    @
 
     bl copy_code_to_wram
 
@@ -168,9 +139,32 @@ rom_memcpy16:
 .section .text.ram
 .thumb
 
+.if MGBA_LOG_ENABLE
+.macro mgba_log str_begin_label, str_end_label
+    push {r0, r1, r2, lr, r3}
+    ldr r0, =\str_begin_label
+    ldr r1, =$MGBA_LOG_STRING
+    .set mgba_msg_len, hello_msg_end - hello_msg_start
+    ldr r2, =$mgba_msg_len
+    bl ram_memcpy8
+
+    ldr r0, =$MGBA_LOG_REG_FLAGS
+    ldr r1, =$MGBA_LOG_ERROR | 0x100
+    str r1, [r0]
+    pop {r0, r1, r2, r3}
+    mov lr, r3
+    pop {r3}
+.endm
+.else
+.macro mgba_log str_begin_label, str_end_label
+.endm
+.endif
+
 
 .func main
 main:
+    mgba_log hello_msg_start, hello_msg_end
+
     @ Setup screen, interrupts
     bl setup_screen
     bl setup_isr
@@ -304,6 +298,56 @@ print_text:
 all_done:
     @ TODO
     b all_done
+.endfunc
+
+
+.func ram_memcpy16
+ram_memcpy16:
+    @ r0 = src
+    @ r1 = dst
+    @ r2 = bytelen
+    @ r3 = i
+    @ r4 = scratch
+    push {r4}
+    mov r3, $0
+.Lram_memcpy16_loop_begin:
+    cmp r3, r2
+    beq .Lram_memcpy16_loop_end
+
+    ldr r4, [r0, r3]
+    str r4, [r1, r3]
+
+    add r3, $2
+
+    b .Lram_memcpy16_loop_begin
+.Lram_memcpy16_loop_end:
+    pop {r4}
+    bx lr
+.endfunc
+
+
+.func ram_memcpy8
+ram_memcpy8:
+    @ r0 = src
+    @ r1 = dst
+    @ r2 = bytelen
+    @ r3 = i
+    @ r4 = scratch
+    push {r4}
+    mov r3, $0
+.Lram_memcpy8_loop_begin:
+    cmp r3, r2
+    beq .Lram_memcpy8_loop_end
+
+    ldrb r4, [r0, r3]
+    strb r4, [r1, r3]
+
+    add r3, $1
+
+    b .Lram_memcpy8_loop_begin
+.Lram_memcpy8_loop_end:
+    pop {r4}
+    bx lr
 .endfunc
 
 
