@@ -150,7 +150,7 @@ rom_memcpy16:
 
     ldr r0, =$MGBA_LOG_REG_FLAGS
     ldr r1, =$MGBA_LOG_ERROR | 0x100
-    str r1, [r0]
+    strh r1, [r0]
     pop {r0, r1, r2, r3}
     mov lr, r3
     pop {r3}
@@ -167,6 +167,12 @@ main:
 
     @ Setup screen, interrupts
     bl setup_screen
+
+    mov r0, $'!'
+    mov r1, $0
+    mov r2, $0
+    bl m4_putc
+
     bl setup_isr
     bl enable_irq
 
@@ -248,9 +254,19 @@ copy_ewram_to_save_data:
 .endfunc
 
 
+.set REG_DISPCNT, 0x04000000
+.set DISPCNT_MODE_MASK, 0x00000007
+.set DISPCNT_PAGE_MASK, 0x00000010
+.set REG_DISPSTAT, 0x04000004
+.set REG_VCOUNT, 0x04000006
+.set M4_VIDEO_PAGE0, 0x06000000
+.set M4_VIDEO_PAGE1, 0x06010000
+.set TARGET_VIDEO_MODE, 0x403
 .func setup_screen
 setup_screen:
-    @ TODO
+    ldr r0, =$TARGET_VIDEO_MODE
+    ldr r1, =$REG_DISPCNT
+    str r0, [r1]
     bx lr
 .endfunc
 
@@ -351,6 +367,94 @@ ram_memcpy8:
 .endfunc
 
 
+.set M4_WIDTH, 240
+.set M4_HEIGHT, 160
+.set M4_GLIPH_WIDTH, M4_WIDTH / BITS_PER_GLIPH
+.func m3_putc
+m4_putc:
+    @ r0 = character to print, ascii index
+    @ r1 = gliph row
+    @ r2 = gliph col
+
+    @ r7 = constants for muls
+
+    push {r4-r7}
+
+    @ r1 := starting pixel idx on screen
+    mov r7, $GLIPH_BITWIDTH
+    mul r1, r7
+    mov r7, $M4_WIDTH
+    mul r1, r7
+    mov r7, $GLIPH_BITHEIGHT
+    mul r2, r7
+    add r1, r2
+    
+    @ r2 := starting pixel location in memory
+    ldr r2, =$M4_VIDEO_PAGE0
+    add r2, r1
+
+    @ r0 := gliph location
+    sub r0, $ASCII_FIRST_GLIPH_IDX
+    mov r7, $BYTES_PER_GLIPH
+    mul r0, r7
+    ldr r3, =sys8Glyphs
+    add r0, r3
+
+    @ for each row in gliph
+    @ r1 is the gliph row iterator
+    @ r3 is the gliph col iterator
+    @ r5 is gliph row byte
+    mov r1, $0
+.Lm4_putc_outer_loop_begin:
+    cmp r1, $GLIPH_BITHEIGHT
+    beq .Lm4_putc_outer_loop_end
+
+    @ load gliph row byte
+    ldrb r5, [r0, r1]
+
+    @ r4 is the bit value to write
+    @ r6 is pixel bit scratch, later VRAM target location
+    mov r3, $0
+.Lm4_putc_inner_loop_begin:
+    cmp r3, $GLIPH_BITWIDTH
+    beq .Lm4_putc_inner_loop_end
+
+    @ Calculate pixel value
+    mov r6, r5
+    lsr r6, r3
+    mov r4, $1
+    and r4, r6
+    @cmp r4, $0
+    @beq .Lm4_putc_done_coloring_pixel
+    beq .Lm4_putc_no_pixel_draw
+    ldr r4, =$0xffff
+.Lm4_putc_done_coloring_pixel:
+
+    @ Calculate target pixel byte address offset
+    mov r6, r2
+    mov r7, $GLIPH_BITWIDTH
+    mul r7, r3
+    add r6, r7
+    add r6, r3
+
+    @ Write pixel
+    strh r4, [r6]
+
+.Lm4_putc_no_pixel_draw:
+    add r3, $1
+    b .Lm4_putc_inner_loop_begin
+.Lm4_putc_inner_loop_end:
+    add r1, $1
+    b .Lm4_putc_outer_loop_begin
+.Lm4_putc_outer_loop_end:
+
+    pop {r4-r7}
+
+    bx lr
+.endfunc
+
+
+
 .arm
 .func master_isr
 master_isr:
@@ -360,6 +464,14 @@ master_isr:
 
 
 .section .rodata.ram
+
+@ From Tonc
+.set BYTES_PER_GLIPH, 8
+.set BITS_PER_GLIPH, 64
+.set GLIPH_BITWIDTH, 8
+.set GLIPH_BYTEWIDTH, 1
+.set GLIPH_BITHEIGHT, 8
+.set ASCII_FIRST_GLIPH_IDX, 32
 sys8Glyphs:
 	.word 0x00000000,0x00000000,0x18181818,0x00180018,0x00003636,0x00000000,0x367F3636,0x0036367F
 	.word 0x3C067C18,0x00183E60,0x1B356600,0x0033566C,0x6E16361C,0x00DE733B,0x000C1818,0x00000000
