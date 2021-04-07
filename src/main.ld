@@ -38,6 +38,16 @@ SECTIONS {
     _ramrodata_lma_begin = LOADADDR(.rodata.ram);
     _ramrodata_lma_end = LOADADDR(.rodata.ram) + SIZEOF(.rodata.ram);
 
+    .data.ram : {
+        KEEP(*(.data.ram))
+        . = ALIGN(4);
+    } >EWRAM AT>ROM
+    _ramdata_vma_begin = ADDR(.data.ram);
+    _ramdata_vma_end = ADDR(.data.ram) + SIZEOF(.data.ram);
+    _ramdata_lma_begin = LOADADDR(.data.ram);
+    _ramdata_lma_end = LOADADDR(.data.ram) + SIZEOF(.data.ram);
+
+
     .data : { 
         *(.data);
         . = ALIGN(4);

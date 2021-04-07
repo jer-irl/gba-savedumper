@@ -88,6 +88,7 @@ init:
 
 .extern _ramtext_vma_begin _ramtext_lma_begin _ramtext_lma_end
 .extern _ramrodata_vma_begin _ramrodata_lma_begin _ramrodata_lma_end
+.extern _ramdata_vma_begin _ramdata_lma_begin _ramdata_lma_end
 .func copy_code_to_wram
 copy_code_to_wram:
     push {lr}
@@ -99,10 +100,17 @@ copy_code_to_wram:
     sub r2, r0
     bl rom_memcpy16
 
-    @Copy rodata
+    @ Copy rodata
     ldr r0, =_ramrodata_lma_begin
     ldr r1, =_ramrodata_vma_begin
     ldr r2, =_ramrodata_lma_end
+    sub r2, r0
+    bl rom_memcpy16
+
+    @ Copy data
+    ldr r0, =_ramdata_lma_begin
+    ldr r1, =_ramdata_vma_begin
+    ldr r2, =_ramdata_lma_end
     sub r2, r0
     bl rom_memcpy16
     
@@ -163,43 +171,139 @@ rom_memcpy16:
 
 .func main
 main:
-    mgba_log hello_msg_start, hello_msg_end
+    mov r0, $CARTSWAP_STAGE_FLASHCART_LOADED
+    ldr r1, =$cart_swap_stage
+    str r0, [r1]
 
     @ Setup screen, interrupts
     bl setup_screen
-
     bl m3_clear_screen
 
     bl setup_isr
     bl enable_irq
 
     @ Cart swap
+    ldr r0, =$cart_swap_stage
+    ldr r0, [r0]
+    cmp r0, $CARTSWAP_STAGE_FLASHCART_LOADED
+    bne .Lmain_goto_panic
     bl print_remove_flash_cart
-    bl await_cart_removed
-    bl print_insert_oem_cart
-    bl await_cart_inserted
-    
-    @ Copy save data to EWRAM
-    bl copy_save_data_to_ewram
+    bl halt
 
-    @ Cart swap
+.Lmain_goto_panic:
+    bl panic
+
+.endfunc
+
+.func on_flash_cart_removed
+on_flash_cart_removed:
+    push {lr}
+    ldr r0, =$cart_swap_stage
+    ldr r1, [r0]
+    cmp r1, $CARTSWAP_STAGE_FLASHCART_LOADED
+    bne .Lon_flash_cart_removed_goto_panic
+
+    @ No work to do here...
+
+    mov r1, $CARTSWAP_STAGE_FLASHCART_NOT_YET_LOADED
+    str r1, [r0]
+
+    bl print_insert_oem_cart
+
+    @ Already in interrupt, just return
+    pop {pc}
+
+.Lon_flash_cart_removed_goto_panic:
+    bl panic
+.endfunc
+
+.func on_oem_cart_inserted
+on_oem_cart_inserted:
+    push {lr}
+
+    ldr r0, =$cart_swap_stage
+    ldr r1, [r0]
+    cmp r1, $CARTSWAP_STAGE_OEM_SAVE_NOT_YET_LOADED
+    bne .Lon_oem_cart_inserted_goto_panic
+
+    push {r0}
+    bl copy_save_data_to_ewram
+    pop {r0}
+
+    mov r1, $CARTSWAP_STAGE_OEM_SAVE_LOADED
+    str r1, [r0]
+
     bl print_remove_oem_cart
-    bl await_cart_removed
+
+    @ Already in interrupt, just return
+    pop {pc}
+
+.Lon_oem_cart_inserted_goto_panic:
+    bl panic
+.endfunc
+
+.func on_oem_cart_removed
+on_oem_cart_removed:
+    push {lr}
+
+    ldr r0, =$cart_swap_stage
+    ldr r1, [r0]
+    cmp r1, $CARTSWAP_STAGE_OEM_SAVE_LOADED
+    bne .Lon_oem_cart_removed_goto_panic
+
+    @ No work to do here
+
+    mov r1, $CARTSWAP_STAGE_OEM_CART_REMOVED
+    str r1, [r0]
+
     bl print_insert_flash_cart
-    bl await_cart_inserted
+
+    @ Already in interrupt, just return
+    pop {pc}
+
+.Lon_oem_cart_removed_goto_panic:
+    bl panic
+.endfunc
+    
+.func on_flash_cart_reinserted
+on_flash_cart_reinserted:
+    push {lr}
+
+    ldr r0, =$cart_swap_stage
+    ldr r1, [r0]
+    cmp r1, $CARTSWAP_STAGE_FLASHCART_REINSERTED
+    bne .Lon_flash_cart_reinserted_goto_panic
 
     @ Copy save data from EWRAM to new cart sram
+    push {r0}
     bl copy_ewram_to_save_data
+    pop {r0}
+
+    mov r1, $CARTSWAP_STAGE_OEM_SAVE_DUMPED
+    str r1, [r0]
 
     @ End
-    bl all_done
+    bl print_all_done
+
+    @ Return out of the interrupt handler to halted cpu
+    pop {pc}
+
+.Lon_flash_cart_reinserted_goto_panic:
+    bl panic
 .endfunc
 
 
 .func print_remove_flash_cart
 print_remove_flash_cart:
-    @ TODO
-    bx lr
+    push {lr}
+
+    bl m3_clear_screen
+    ldr r0, =$remove_cart_message
+    mov r1, $0
+    mov r2, $0
+    bl m3_puts
+
+    pop {pc}
 .endfunc
 
 
@@ -274,21 +378,57 @@ print_swap_to_oem:
 .endfunc
 
 
+.set REG_BASE, 0x04000000
+.set REG_IE, REG_BASE + 0x0200
+.set REG_IF, REG_BASE + 0x0202
+.set REG_IME, REG_BASE + 0x0208
+.set ISR_ADDR, 0x03007FFC
+.set GAMEPAK_BIT, 0xB
+.set GAMEPAK_MASK, 0b0000100000000000
+
 .func enable_irq
 enable_irq:
-    @ TODO
+    ldr r0, =$REG_IE
+    ldr r1, =$GAMEPAK_MASK
+    str r1, [r0]
+
     bx lr
 .endfunc
 
 
-.set REG_BASE, 0x04000000
-.set REG_IE, $REG_BASE + 0x0200
-.set REG_IF, $REG_BASE + 0x0202
-.set REG_IME, $REG_BASE + 0x0208
 .func setup_isr
 setup_isr:
-    @ TODO
+    ldr r0, =$master_isr
+    ldr r1, =$ISR_ADDR
+    str r0, [r1]
     bx lr
+.endfunc
+
+
+.func thumb_master_isr
+thumb_master_isr:
+    push {lr}
+    ldr r0, =$REG_IF
+    ldr r1, =$GAMEPAK_MASK
+    cmp r0, r1
+    bne .Lthumb_master_isr_unknown_interrupt
+.Lthumb_master_isr_known_interrupt:
+    @ TODO
+
+    pop {pc}
+
+.Lthumb_master_isr_unknown_interrupt:
+    ldr r0, =$bad_interrupt_msg
+    mov r1, $0
+    mov r2, $0
+    bl m3_puts
+.endfunc
+
+.func halt
+halt:
+    @ TODO
+    bl panic
+
 .endfunc
 
 
@@ -306,10 +446,10 @@ print_text:
 .endfunc
 
 
-.func all_done
-all_done:
+.func print_all_done
+print_all_done:
     @ TODO
-    b all_done
+    bx lr
 .endfunc
 
 
@@ -554,12 +694,48 @@ m3_clear_screen:
 .endfunc
 
 
+.func panic
+panic:
+    push {lr}
+
+    bl m3_clear_screen
+    ldr r0, =$panic_msg
+    mov r1, $0
+    mov r2, $0
+    bl m3_puts
+
+    @ TODO
+.Lpanic_infinite_loop:
+    b .Lpanic_infinite_loop
+
+    pop {pc}
+.endfunc
+
+
 .arm
 .func master_isr
 master_isr:
-    @ TODO
-    bx lr
+    push {lr}
+    ldr r0, =$thumb_master_isr
+    orr r0, $1
+    mov lr, pc
+    bx r0
+    pop {pc}
 .endfunc
+
+
+.section .data.ram
+
+.set CARTSWAP_STAGE_FLASHCART_NOT_YET_LOADED, 0
+.set CARTSWAP_STAGE_FLASHCART_LOADED, 1
+.set CARTSWAP_STAGE_FLASHCART_REMOVED, 2
+.set CARTSWAP_STAGE_OEM_SAVE_NOT_YET_LOADED, 3
+.set CARTSWAP_STAGE_OEM_SAVE_LOADED, 4
+.set CARTSWAP_STAGE_OEM_CART_REMOVED, 5
+.set CARTSWAP_STAGE_FLASHCART_REINSERTED, 6
+.set CARTSWAP_STAGE_OEM_SAVE_DUMPED, 7
+cart_swap_stage:
+    .word 0x00000000
 
 
 .section .rodata.ram
@@ -600,6 +776,14 @@ sys8Glyphs:
 	.word 0x18181818,0x00181818,0x3018180C,0x000C1818,0x003B6E00,0x00000000,0x00000000,0x00000000
 
 
-hello_msg_start:
-    .asciz "hello there"
-hello_msg_end:
+.align
+bad_interrupt_msg:
+    .asciz "unknown interrupt received"
+
+.align
+panic_msg:
+    .asciz "unrecoverable panic"
+
+.align
+remove_cart_message:
+    .asciz "please remove cartridge"
