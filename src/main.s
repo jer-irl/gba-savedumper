@@ -171,7 +171,7 @@ main:
     mov r0, $'!'
     mov r1, $0
     mov r2, $0
-    bl m4_putc
+    bl m3_putc
 
     bl setup_isr
     bl enable_irq
@@ -259,14 +259,13 @@ copy_ewram_to_save_data:
 .set DISPCNT_PAGE_MASK, 0x00000010
 .set REG_DISPSTAT, 0x04000004
 .set REG_VCOUNT, 0x04000006
-.set M4_VIDEO_PAGE0, 0x06000000
-.set M4_VIDEO_PAGE1, 0x06010000
+.set M3_VIDEO_PAGE, 0x06000000
 .set TARGET_VIDEO_MODE, 0x403
 .func setup_screen
 setup_screen:
     ldr r0, =$TARGET_VIDEO_MODE
     ldr r1, =$REG_DISPCNT
-    str r0, [r1]
+    strh r0, [r1]
     bx lr
 .endfunc
 
@@ -367,90 +366,128 @@ ram_memcpy8:
 .endfunc
 
 
-.set M4_WIDTH, 240
-.set M4_HEIGHT, 160
-.set M4_GLIPH_WIDTH, M4_WIDTH / BITS_PER_GLIPH
+.set M3_WIDTH, 240
+.set M3_HEIGHT, 160
+.set M3_BYTES_PER_PIXEL, 2
+.set M3_GLIPHS_PER_ROW, M3_WIDTH / GLIPH_BITWIDTH
+.set M3_GLIPHS_PER_COL, M3_HEIGHT / GLIPH_BITHEIGHT
+.set M3_BYTES_PER_ROW, M3_WIDTH * M3_BYTES_PER_PIXEL
 .func m3_putc
-m4_putc:
-    @ r0 = character to print, ascii index
-    @ r1 = gliph row
-    @ r2 = gliph col
+m3_putc:
+    rtarget_gliph_ascii_idx .req r0
+    rtarget_gliph_row .req r1
+    rtarget_gliph_col .req r2
 
     @ r7 = constants for muls
+    rscratch .req r7
 
-    push {r4-r7}
+    push {r4-r6, rscratch}
 
-    @ r1 := starting pixel idx on screen
-    mov r7, $GLIPH_BITWIDTH
-    mul r1, r7
-    mov r7, $M4_WIDTH
-    mul r1, r7
-    mov r7, $GLIPH_BITHEIGHT
-    mul r2, r7
-    add r1, r2
+    rscreen_pixel_addr .req r1
+    @ Calculate number of pixel rows
+    mov rscratch, $M3_GLIPHS_PER_COL
+    mul rscreen_pixel_addr, rtarget_gliph_row, rscratch
+    @ Multiply by bytes per row
+    ldr rscratch, =$M3_BYTES_PER_ROW
+    mul rscreen_pixel_addr, rscratch
+    @ Calculate number of pixel cols
+    mov rscratch, $GLIPH_BITWIDTH
+    mul rtarget_gliph_col, rscratch
+    @ Add column byte offset
+    mov rscratch, $M3_BYTES_PER_PIXEL
+    mul rtarget_gliph_col, rscratch
+    add rscreen_pixel_addr, rtarget_gliph_col
+    @ Add to VRAM
+    ldr rscratch, =$M3_VIDEO_PAGE
+    add rscreen_pixel_addr, rscratch
+
+    .unreq rtarget_gliph_col
+    .unreq rtarget_gliph_row
     
-    @ r2 := starting pixel location in memory
-    ldr r2, =$M4_VIDEO_PAGE0
-    add r2, r1
-
     @ r0 := gliph location
-    sub r0, $ASCII_FIRST_GLIPH_IDX
-    mov r7, $BYTES_PER_GLIPH
-    mul r0, r7
-    ldr r3, =sys8Glyphs
-    add r0, r3
+    @ r0 is currently the ascii char idx
+    rgliph_addr .req r0
+    sub rgliph_addr, $ASCII_FIRST_GLIPH_IDX
+    mov rscratch, $BYTES_PER_GLIPH
+    mul rgliph_addr, rscratch
+    ldr rscratch, =sys8Glyphs
+    add rgliph_addr, rscratch
 
     @ for each row in gliph
-    @ r1 is the gliph row iterator
-    @ r3 is the gliph col iterator
-    @ r5 is gliph row byte
-    mov r1, $0
-.Lm4_putc_outer_loop_begin:
-    cmp r1, $GLIPH_BITHEIGHT
-    beq .Lm4_putc_outer_loop_end
+    rgliph_pixel_bit_row_idx .req r2
+    rgliph_bitrow_byte_value .req r5
+    mov rgliph_pixel_bit_row_idx, $0
+.Lm3_putc_outer_loop_begin:
+    cmp rgliph_pixel_bit_row_idx, $GLIPH_BITHEIGHT
+    beq .Lm3_putc_outer_loop_end
 
     @ load gliph row byte
-    ldrb r5, [r0, r1]
+    ldrb rgliph_bitrow_byte_value, [rgliph_addr, rgliph_pixel_bit_row_idx]
 
     @ r4 is the bit value to write
     @ r6 is pixel bit scratch, later VRAM target location
-    mov r3, $0
-.Lm4_putc_inner_loop_begin:
-    cmp r3, $GLIPH_BITWIDTH
-    beq .Lm4_putc_inner_loop_end
+    rgliph_pixel_bit_col_idx .req r3
+    mov rgliph_pixel_bit_col_idx, $0
+.Lm3_putc_inner_loop_begin:
+    cmp rgliph_pixel_bit_col_idx, $GLIPH_BITWIDTH
+    beq .Lm3_putc_inner_loop_end
 
     @ Calculate pixel value
-    mov r6, r5
-    lsr r6, r3
-    mov r4, $1
-    and r4, r6
-    @cmp r4, $0
-    @beq .Lm4_putc_done_coloring_pixel
-    beq .Lm4_putc_no_pixel_draw
-    ldr r4, =$0xffff
-.Lm4_putc_done_coloring_pixel:
+    rtmp0 .req r6
+    rtmp1 .req r4
+    mov rtmp0, rgliph_bitrow_byte_value
+    lsr rtmp0, rgliph_pixel_bit_col_idx
+    mov rtmp1, $1
+    and rtmp1, rtmp0
+    cmp rtmp1, $0
+    beq .Lm3_putc_no_pixel_draw
+    .unreq rtmp0
+    .unreq rtmp1
+    rpixel_to_write_value .req r4
+    ldr rpixel_to_write_value, =$0x7fff
 
     @ Calculate target pixel byte address offset
-    mov r6, r2
-    mov r7, $GLIPH_BITWIDTH
-    mul r7, r3
-    add r6, r7
-    add r6, r3
+    rpixel_vram_addr .req r6
+    push {r0}
+    rbytes_per_pixel .req r0
+    mov rpixel_vram_addr, rscreen_pixel_addr
+    ldr rscratch, =$M3_BYTES_PER_ROW
+    mov rbytes_per_pixel, $M3_BYTES_PER_PIXEL
+    mul rscratch, rgliph_pixel_bit_row_idx
+    add rpixel_vram_addr, rscratch
+    mov rscratch, rgliph_pixel_bit_col_idx
+    mul rscratch, rbytes_per_pixel
+    add rpixel_vram_addr, rscratch
+    .unreq rbytes_per_pixel
+    pop {r0}
 
     @ Write pixel
-    strh r4, [r6]
+    strh rpixel_to_write_value, [rpixel_vram_addr]
+    .unreq rpixel_vram_addr
+    .unreq rpixel_to_write_value
 
-.Lm4_putc_no_pixel_draw:
-    add r3, $1
-    b .Lm4_putc_inner_loop_begin
-.Lm4_putc_inner_loop_end:
-    add r1, $1
-    b .Lm4_putc_outer_loop_begin
-.Lm4_putc_outer_loop_end:
+.Lm3_putc_no_pixel_draw:
+    add rgliph_pixel_bit_col_idx, $1
+    b .Lm3_putc_inner_loop_begin
+.Lm3_putc_inner_loop_end:
 
-    pop {r4-r7}
+.unreq rgliph_pixel_bit_col_idx
+
+    add rgliph_pixel_bit_row_idx, $1
+    b .Lm3_putc_outer_loop_begin
+.Lm3_putc_outer_loop_end:
+
+.unreq rgliph_pixel_bit_row_idx
+.unreq rgliph_bitrow_byte_value
+
+    pop {r4-r6, rscratch}
 
     bx lr
+
+.unreq rscratch
+.unreq rtarget_gliph_ascii_idx
+.unreq rgliph_addr
+
 .endfunc
 
 
