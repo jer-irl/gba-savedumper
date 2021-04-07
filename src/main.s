@@ -141,19 +141,19 @@ rom_memcpy16:
 
 .if MGBA_LOG_ENABLE
 .macro mgba_log str_begin_label, str_end_label
-    push {r0, r1, r2, lr, r3}
-    ldr r0, =\str_begin_label
-    ldr r1, =$MGBA_LOG_STRING
-    .set mgba_msg_len, hello_msg_end - hello_msg_start
-    ldr r2, =$mgba_msg_len
-    bl ram_memcpy8
+    @ push {r0, r1, r2, lr, r3}
+    @ ldr r0, =\str_begin_label
+    @ ldr r1, =$MGBA_LOG_STRING
+    @ .set mgba_msg_len, hello_msg_end - hello_msg_start
+    @ ldr r2, =$mgba_msg_len
+    @ bl ram_memcpy8
 
-    ldr r0, =$MGBA_LOG_REG_FLAGS
-    ldr r1, =$MGBA_LOG_ERROR | 0x100
-    strh r1, [r0]
-    pop {r0, r1, r2, r3}
-    mov lr, r3
-    pop {r3}
+    @ ldr r0, =$MGBA_LOG_REG_FLAGS
+    @ ldr r1, =$MGBA_LOG_ERROR | 0x100
+    @ strh r1, [r0]
+    @ pop {r0, r1, r2, r3}
+    @ mov lr, r3
+    @ pop {r3}
 .endm
 .else
 .macro mgba_log str_begin_label, str_end_label
@@ -168,10 +168,7 @@ main:
     @ Setup screen, interrupts
     bl setup_screen
 
-    mov r0, $'!'
-    mov r1, $0
-    mov r2, $0
-    bl m3_putc
+    bl m3_clear_screen
 
     bl setup_isr
     bl enable_irq
@@ -379,9 +376,9 @@ m3_putc:
     rtarget_gliph_col .req r2
 
     @ r7 = constants for muls
-    rscratch .req r7
+    push {r4-r7, lr}
 
-    push {r4-r6, rscratch}
+    rscratch .req r7
 
     rscreen_pixel_addr .req r1
     @ Calculate number of pixel rows
@@ -480,9 +477,7 @@ m3_putc:
 .unreq rgliph_pixel_bit_row_idx
 .unreq rgliph_bitrow_byte_value
 
-    pop {r4-r6, rscratch}
-
-    bx lr
+    pop {r4-r7, pc}
 
 .unreq rscratch
 .unreq rtarget_gliph_ascii_idx
@@ -490,6 +485,73 @@ m3_putc:
 
 .endfunc
 
+.func m3_puts
+m3_puts:
+    rstring_addr .req r0
+    rtarget_gliph_row .req r1
+    rtarget_gliph_col .req r2
+
+    push {r4, lr}
+
+    ri .req r3
+    rchar .req r4
+
+    mov ri, $0
+.Lm3_puts_loop_begin:
+    ldrb rchar, [rstring_addr, ri]
+    cmp rchar, $0
+    beq .Lm3_puts_loop_end
+
+    push {r0-r3}
+    mov r0, rchar
+    mov r1, rtarget_gliph_row
+    mov r2, rtarget_gliph_col
+    add r2, ri
+    bl m3_putc
+    pop {r0-r3}
+
+    add ri, $1
+    b .Lm3_puts_loop_begin
+.Lm3_puts_loop_end:
+
+    .unreq ri
+    .unreq rchar
+
+    pop {r4, pc}
+
+.endfunc
+
+
+.set M3_PIXELS, M3_HEIGHT * M3_WIDTH
+.func m3_clear_screen
+m3_clear_screen:
+    ri .req r0
+    rtotal_num_bytes .req r1
+    rvalue_to_write .req r2
+    rvram_addr .req r3
+
+    mov ri, $0
+    ldr rtotal_num_bytes, =$M3_PIXELS
+    lsl rtotal_num_bytes, $1
+    mov rvalue_to_write, $0
+    ldr rvram_addr, =$M3_VIDEO_PAGE
+
+.Lm3_clear_screen_loop_begin:
+    cmp ri, rtotal_num_bytes
+    beq .Lm3_clear_screen_loop_end
+    
+    strh rvalue_to_write, [rvram_addr, ri]
+
+    add ri, $2
+    b .Lm3_clear_screen_loop_begin
+.Lm3_clear_screen_loop_end:
+
+    .unreq ri
+    .unreq rtotal_num_bytes
+    .unreq rvalue_to_write
+
+    bx lr
+.endfunc
 
 
 .arm
