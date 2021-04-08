@@ -47,6 +47,8 @@ SECTIONS {
     _ramdata_lma_begin = LOADADDR(.data.ram);
     _ramdata_lma_end = LOADADDR(.data.ram) + SIZEOF(.data.ram);
 
+    _ramsave_area_begin = _ramdata_vma_end;
+    _ramsave_area_end = _ramsave_area_begin + 0x020000;
 
     .data : { 
         *(.data);

@@ -50,10 +50,10 @@ end_header:
 @ Fool mgba MB detection
 .word 0xEA000000 @ b 0
 
-.align
+.align 2
 .asciz "FLASH1M_Vnnn"
-.align
 
+.align 2
 .set IRQ_MODE, 0x12
 .set SYS_MODE, 0x1F
 .set IRQ_STACK, 0x03007FA0
@@ -172,7 +172,7 @@ rom_memcpy16:
 .func main
 main:
     mov r0, $CARTSWAP_STAGE_FLASHCART_LOADED
-    ldr r1, =$cart_swap_stage
+    ldr r1, =$g_cart_swap_stage
     str r0, [r1]
 
     @ Setup screen, interrupts
@@ -183,7 +183,7 @@ main:
     bl enable_irq
 
     @ Cart swap
-    ldr r0, =$cart_swap_stage
+    ldr r0, =$g_cart_swap_stage
     ldr r0, [r0]
     cmp r0, $CARTSWAP_STAGE_FLASHCART_LOADED
     bne .Lmain_goto_panic
@@ -197,7 +197,7 @@ main:
 .func on_flash_cart_removed
 on_flash_cart_removed:
     push {lr}
-    ldr r0, =$cart_swap_stage
+    ldr r0, =$g_cart_swap_stage
     ldr r1, [r0]
     cmp r1, $CARTSWAP_STAGE_FLASHCART_LOADED
     bne .Lon_flash_cart_removed_goto_panic
@@ -220,7 +220,7 @@ on_flash_cart_removed:
 on_oem_cart_inserted:
     push {lr}
 
-    ldr r0, =$cart_swap_stage
+    ldr r0, =$g_cart_swap_stage
     ldr r1, [r0]
     cmp r1, $CARTSWAP_STAGE_OEM_SAVE_NOT_YET_LOADED
     bne .Lon_oem_cart_inserted_goto_panic
@@ -245,7 +245,7 @@ on_oem_cart_inserted:
 on_oem_cart_removed:
     push {lr}
 
-    ldr r0, =$cart_swap_stage
+    ldr r0, =$g_cart_swap_stage
     ldr r1, [r0]
     cmp r1, $CARTSWAP_STAGE_OEM_SAVE_LOADED
     bne .Lon_oem_cart_removed_goto_panic
@@ -268,7 +268,7 @@ on_oem_cart_removed:
 on_flash_cart_reinserted:
     push {lr}
 
-    ldr r0, =$cart_swap_stage
+    ldr r0, =$g_cart_swap_stage
     ldr r1, [r0]
     cmp r1, $CARTSWAP_STAGE_FLASHCART_REINSERTED
     bne .Lon_flash_cart_reinserted_goto_panic
@@ -350,8 +350,146 @@ print_insert_flash_cart:
 
 .func copy_save_data_to_ewram
 copy_save_data_to_ewram:
+    push {lr}
+
+    bl detect_save_type
+
     @ TODO
     bl panic
+
+    pop {pc}
+.endfunc
+
+.set ROM_REGION_BEGIN_ADDR, 0x08000000
+.set ROM_REGION_END_ADDR, 0x09FFFFFF
+.func detect_save_type
+detect_save_type:
+    push {r4-r6, lr}
+    
+    bl m3_clear_screen
+    ldr r0, =$scanning_for_save_type_msg
+    mov r1, $0
+    mov r2, $0
+    bl m3_puts
+
+    ralignment .req r4
+    ri .req r5
+
+    mov ralignment, $4
+    mov ri, $0
+.Ldetect_save_type_loop_begin:
+    cmp ri, $NUM_CART_SAVE_TYPES
+    beq .Ldetect_save_type_not_found
+
+    ldr r0, =$cart_save_type_pattern_table
+    mov r6, ralignment
+    mul r6, ri
+    add r0, r6
+    ldr r0, [r0]
+
+    ldr r1, =$ROM_REGION_BEGIN_ADDR
+    ldr r2, =$ROM_REGION_END_ADDR
+    mov r3, ralignment
+
+    bl scan_memory
+
+    add ri, $1
+    b .Ldetect_save_type_loop_begin
+
+.Ldetect_save_type_found:
+.Ldetect_save_type_not_found:
+    b .Ldetect_save_type_done
+
+.Ldetect_save_type_done:
+    .unreq ralignment
+    .unreq ri
+
+    pop {r4-r6, pc}
+.endfunc
+
+
+@ r0 := 0 if not found, otherwise address of pattern
+.func scan_memory
+scan_memory:
+    push {r4-r7, lr}
+
+    @ Optimizing so not as much pushing and popping to the stack in the loop
+    rpattern_ptr .req r4
+    rsearch_region_begin_ptr .req r5
+    rsearch_region_end_ptr .req r6
+    ralignment_constraint .req r7
+    ri .req r8
+
+    mov rpattern_ptr, r0    
+    mov rsearch_region_begin_ptr, r1
+    mov rsearch_region_end_ptr, r2
+    mov ralignment_constraint, r3
+
+.Lscan_memory_loop_begin:
+    cmp rsearch_region_begin_ptr, rsearch_region_end_ptr
+    bge .Lscan_memory_not_found
+
+    mov r0, rpattern_ptr
+    mov r1, rsearch_region_begin_ptr
+
+    cmp r0, $0
+    beq .Lscan_memory_found
+
+    add rsearch_region_begin_ptr, ralignment_constraint
+    b .Lscan_memory_loop_begin
+
+.Lscan_memory_not_found:
+    mov r0, $0
+
+.Lscan_memory_found:
+    mov r0, rsearch_region_begin_ptr
+
+.Lscan_memory_done:
+    .unreq rpattern_ptr
+    .unreq rsearch_region_begin_ptr
+    .unreq rsearch_region_end_ptr
+    .unreq ralignment_constraint
+    .unreq ri
+
+    pop {r4-r7, pc}
+.endfunc
+
+
+@ Returns 0 in r0 if strings match
+.func strcmp
+strcmp:
+    rstr0ptr .req r0 @ must be null-terminated
+    rstr1ptr .req r1
+
+    rstr0char .req r2
+    rstr1char .req r3
+
+.Lstrcmp_loop_begin:
+    ldr rstr0char, [rstr0ptr]
+    cmp rstr0char, $0
+    beq .Lstrcmp_match
+
+    ldr rstr1char, [rstr1ptr]
+    cmp rstr0char, rstr1char
+    bne .Lstrcmp_mismatch
+
+    add rstr0ptr, $1
+    add rstr1ptr, $1
+
+    b .Lstrcmp_loop_begin
+
+    .unreq rstr0char
+    .unreq rstr1char
+
+.Lstrcmp_mismatch:
+    mov r0, $1
+    b .Lstrcmp_return
+
+.Lstrcmp_match:
+    mov r0, $0
+    b .Lstrcmp_return
+
+.Lstrcmp_return:
     bx lr
 .endfunc
 
@@ -443,7 +581,7 @@ thumb_master_isr:
 handle_gamepak_interrupt:
     push {lr}
 
-    ldr r0, =$cart_swap_stage
+    ldr r0, =$g_cart_swap_stage
     ldr r0, [r0]
     cmp r0, $CARTSWAP_STAGE_FLASHCART_NOT_YET_LOADED
     beq .Lhandle_gamepak_interrupt_FLASHCART_NOT_YET_LOADED
@@ -514,24 +652,17 @@ halt:
 .endfunc
 
 
-.func wram_memcpy16
-wram_memcpy16:
-    @ TODO
-    bx lr
-.endfunc
-
-
-.func print_text
-print_text:
-    @ TODO
-    bx lr
-.endfunc
-
-
 .func print_all_done
 print_all_done:
-    @ TODO
-    bx lr
+    push {lr}
+
+    bl m3_clear_screen
+    ldr r0, =$all_done_msg
+    mov r1, $0
+    mov r2, $0
+    bl m3_puts
+
+    pop {pc}
 .endfunc
 
 
@@ -707,6 +838,7 @@ m3_putc:
 
 .endfunc
 
+
 .func m3_puts
 m3_puts:
     rstring_addr .req r0
@@ -816,7 +948,18 @@ master_isr:
 .set CARTSWAP_STAGE_OEM_CART_REMOVED, 5
 .set CARTSWAP_STAGE_FLASHCART_REINSERTED, 6
 .set CARTSWAP_STAGE_OEM_SAVE_DUMPED, 7
-cart_swap_stage:
+g_cart_swap_stage:
+    .word 0x00000000
+
+
+.set CART_SAVE_TYPE_UNKNOWN, 0
+.set CART_SAVE_TYPE_EEPROM, 1
+.set CART_SAVE_TYPE_SRAM, 2
+.set CART_SAVE_TYPE_FLASH, 3
+.set CART_SAVE_TYPE_FLASH512, 4
+.set CART_SAVE_TYPE_FLASH1M, 5
+.set NUM_CART_SAVE_TYPES, 6
+g_cart_save_type:
     .word 0x00000000
 
 
@@ -858,30 +1001,60 @@ sys8Glyphs:
 	.word 0x18181818,0x00181818,0x3018180C,0x000C1818,0x003B6E00,0x00000000,0x00000000,0x00000000
 
 
-.align
+.align 2
 bad_interrupt_msg:
     .asciz "unknown interrupt received"
 
-.align
+.align 2
 panic_msg:
     .asciz "unrecoverable panic"
 
-.align
+.align 2
 remove_cart_message:
     .asciz "please remove cartridge"
 
-.align
+.align 2
 unknown_cartswap_state_msg:
     .asciz "Unknown cartswap state"
 
-.align
+.align 2
 insert_oem_cart_msg:
     .asciz "Insert original cart now"
 
-.align
+.align 2
 remove_oem_cart_msg:
     .asciz "Remove oem cart now"
 
-.align
+.align 2
 insert_flash_cart_msg:
     .asciz "Insert flash cart now"
+
+.align 2
+all_done_msg:
+    .asciz "All done, power off"
+
+.align 2
+cart_save_type_pattern_UNKNOWN:
+    .asciz "BAD"
+cart_save_type_pattern_EEPROM:
+    .asciz "EEPROM_V"
+cart_save_type_pattern_SRAM:
+    .asciz "SRAM_V"
+cart_save_type_pattern_FLASH:
+    .asciz "FLASH_V"
+cart_save_type_pattern_FLASH512:
+    .asciz "FLASH512_V"
+cart_save_type_pattern_FLASH1M:
+    .asciz "FLASH1M_V"
+
+.align 2
+cart_save_type_pattern_table:
+    .word cart_save_type_pattern_UNKNOWN
+    .word cart_save_type_pattern_EEPROM
+    .word cart_save_type_pattern_SRAM
+    .word cart_save_type_pattern_FLASH
+    .word cart_save_type_pattern_FLASH512
+    .word cart_save_type_pattern_FLASH1M
+
+scanning_for_save_type_msg:
+    .asciz "Scanning rom for save type"
