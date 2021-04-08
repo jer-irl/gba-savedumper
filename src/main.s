@@ -192,7 +192,6 @@ main:
 
 .Lmain_goto_panic:
     bl panic
-
 .endfunc
 
 .func on_flash_cart_removed
@@ -205,7 +204,7 @@ on_flash_cart_removed:
 
     @ No work to do here...
 
-    mov r1, $CARTSWAP_STAGE_FLASHCART_NOT_YET_LOADED
+    mov r1, $CARTSWAP_STAGE_OEM_SAVE_NOT_YET_LOADED
     str r1, [r0]
 
     bl print_insert_oem_cart
@@ -309,41 +308,50 @@ print_remove_flash_cart:
 
 .func print_insert_oem_cart
 print_insert_oem_cart:
-    @ TODO
-    bx lr
+    push {lr}
+
+    bl m3_clear_screen
+    ldr r0, =$insert_oem_cart_msg
+    mov r1, $0
+    mov r2, $0
+    bl m3_puts
+
+    pop {pc}
 .endfunc
 
 
 .func print_remove_oem_cart
 print_remove_oem_cart:
-    @ TODO
-    bx lr
+    push {lr}
+
+    bl m3_clear_screen
+    ldr r0, =$remove_oem_cart_msg
+    mov r1, $0
+    mov r2, $0
+    bl m3_puts
+
+    pop {pc}
 .endfunc
 
 
 .func print_insert_flash_cart
 print_insert_flash_cart:
-    @ TODO
-    bx lr
-.endfunc
+    push {lr}
 
-.func await_cart_removed
-await_cart_removed:
-    @ TODO
-    bx lr
-.endfunc
+    bl m3_clear_screen
+    ldr r0, =$insert_flash_cart_msg
+    mov r1, $0
+    mov r2, $0
+    bl m3_puts
 
-
-.func await_cart_inserted
-await_cart_inserted:
-    @ TODO
-    bx lr
+    pop {pc}
 .endfunc
 
 
 .func copy_save_data_to_ewram
 copy_save_data_to_ewram:
     @ TODO
+    bl panic
     bx lr
 .endfunc
 
@@ -351,6 +359,7 @@ copy_save_data_to_ewram:
 .func copy_ewram_to_save_data
 copy_ewram_to_save_data:
     @ TODO
+    bl panic
     bx lr
 .endfunc
 
@@ -384,12 +393,15 @@ print_swap_to_oem:
 .set REG_IME, REG_BASE + 0x0208
 .set ISR_ADDR, 0x03007FFC
 .set GAMEPAK_BIT, 0xB
-.set GAMEPAK_MASK, 0b0000100000000000
+.set GAMEPAK_MASK, 0b0010000000000000
 
 .func enable_irq
 enable_irq:
     ldr r0, =$REG_IE
     ldr r1, =$GAMEPAK_MASK
+    str r1, [r0]
+    ldr r0, =$REG_IME
+    mov r1, $1
     str r1, [r0]
 
     bx lr
@@ -409,26 +421,96 @@ setup_isr:
 thumb_master_isr:
     push {lr}
     ldr r0, =$REG_IF
+    ldrh r0, [r0]
     ldr r1, =$GAMEPAK_MASK
     cmp r0, r1
     bne .Lthumb_master_isr_unknown_interrupt
 .Lthumb_master_isr_known_interrupt:
-    @ TODO
-
+    bl handle_gamepak_interrupt
     pop {pc}
 
 .Lthumb_master_isr_unknown_interrupt:
+    bl m3_clear_screen
     ldr r0, =$bad_interrupt_msg
     mov r1, $0
     mov r2, $0
     bl m3_puts
+    bl panic
 .endfunc
 
-.func halt
-halt:
-    @ TODO
+
+.func handle_gamepak_interrupt
+handle_gamepak_interrupt:
+    push {lr}
+
+    ldr r0, =$cart_swap_stage
+    ldr r0, [r0]
+    cmp r0, $CARTSWAP_STAGE_FLASHCART_NOT_YET_LOADED
+    beq .Lhandle_gamepak_interrupt_FLASHCART_NOT_YET_LOADED
+    cmp r0, $CARTSWAP_STAGE_FLASHCART_LOADED
+    beq .Lhandle_gamepak_interrupt_FLASHCART_LOADED
+    cmp r0, $CARTSWAP_STAGE_FLASHCART_REMOVED
+    beq .Lhandle_gamepak_interrupt_FLASHCART_REMOVED
+    cmp r0, $CARTSWAP_STAGE_OEM_SAVE_NOT_YET_LOADED
+    beq .Lhandle_gamepak_interrupt_OEM_SAVE_NOT_YET_LOADED
+    cmp r0, $CARTSWAP_STAGE_OEM_SAVE_LOADED
+    beq .Lhandle_gamepak_interrupt_OEM_SAVE_LOADED
+    cmp r0, $CARTSWAP_STAGE_OEM_CART_REMOVED
+    beq .Lhandle_gamepak_interrupt_OEM_CART_REMOVED
+    cmp r0, $CARTSWAP_STAGE_FLASHCART_REINSERTED
+    beq .Lhandle_gamepak_interrupt_FLASHCART_REINSERTED
+    cmp r0, $CARTSWAP_STAGE_OEM_SAVE_DUMPED
+    beq .Lhandle_gamepak_interrupt_OEM_SAVE_DUMPED
+
+    @ Unknown state
     bl panic
 
+.Lhandle_gamepak_interrupt_FLASHCART_NOT_YET_LOADED:
+    @ Shouldn't get into this state from an interrupt
+    @ Did we yank too early somehow?
+    bl panic
+
+.Lhandle_gamepak_interrupt_FLASHCART_LOADED:
+    bl on_flash_cart_removed
+    b .Lhandle_gamepak_interrupt_done
+
+.Lhandle_gamepak_interrupt_FLASHCART_REMOVED:
+    bl on_oem_cart_inserted
+    b .Lhandle_gamepak_interrupt_done
+
+.Lhandle_gamepak_interrupt_OEM_SAVE_NOT_YET_LOADED:
+    @ Shouldn't get here on interrupt
+    bl on_oem_cart_removed
+    b .Lhandle_gamepak_interrupt_done
+
+.Lhandle_gamepak_interrupt_OEM_SAVE_LOADED:
+    bl on_oem_cart_removed
+    b .Lhandle_gamepak_interrupt_done
+
+.Lhandle_gamepak_interrupt_OEM_CART_REMOVED:
+    bl on_flash_cart_reinserted
+    b .Lhandle_gamepak_interrupt_done
+
+.Lhandle_gamepak_interrupt_FLASHCART_REINSERTED:
+    @ Shouldn't get interrupt here
+    bl panic
+
+.Lhandle_gamepak_interrupt_OEM_SAVE_DUMPED:
+    @ Shouldn't get interrupt here
+    bl panic
+
+.Lhandle_gamepak_interrupt_done:
+    pop {pc}
+.endfunc
+
+
+.set SWI_HALT_THUMB, 0x02
+.func halt
+halt:
+    @ TODO REPLACE WITH SWI
+    b halt
+    @swi $SWI_HALT_THUMB
+    bl panic
 .endfunc
 
 
@@ -787,3 +869,19 @@ panic_msg:
 .align
 remove_cart_message:
     .asciz "please remove cartridge"
+
+.align
+unknown_cartswap_state_msg:
+    .asciz "Unknown cartswap state"
+
+.align
+insert_oem_cart_msg:
+    .asciz "Insert original cart now"
+
+.align
+remove_oem_cart_msg:
+    .asciz "Remove oem cart now"
+
+.align
+insert_flash_cart_msg:
+    .asciz "Insert flash cart now"
