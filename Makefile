@@ -12,7 +12,7 @@ AS = arm-none-eabi-as
 OBJCOPY = arm-none-eabi-objcopy
 
 CFLAGS = -c -g -O0 -Wall -Wextra -Werror -mthumb -mthumb-interwork -mcpu=$(CPU) -mtune=$(CPU) -ffast-math -fomit-frame-pointer -mthumb -mthumb-interwork
-ASFLAGS = -c -mthumb -mthumb-interwork
+ASFLAGS = -c -mthumb -mthumb-interwork -g
 LDFLAGS = -g -Map=$(BUILD)/asteroids.map
 
 AS_OBJECTS = \

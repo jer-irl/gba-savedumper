@@ -137,7 +137,7 @@ rom_memcpy16:
 .endfunc
 
 
-.section .text.ram
+.section .text.ram.0
 .thumb
 
 .if MGBA_LOG_ENABLE
@@ -218,6 +218,7 @@ on_flash_cart_removed:
     bl print_insert_oem_cart
 
     ldr r0, =$g_is_in_mgba
+    ldr r0, [r0]
     cmp r0, $1
     bne .Lon_flash_cart_removed_done
     @ Enable button control because mgba doesn't raise gamepak interrupt
@@ -248,6 +249,7 @@ on_oem_cart_inserted:
     bne .Lon_oem_cart_inserted_goto_panic
 
     push {r0}
+    bl detect_save_type
     bl copy_save_data_to_ewram
     pop {r0}
 
@@ -370,14 +372,97 @@ print_insert_flash_cart:
 .endfunc
 
 
+.set SRAM_REGION_BEGIN, 0x0E000000
+.set SRAM_REGION_END, 0x0E00FFFF
+.set SRAM_REGION_SIZE, SRAM_REGION_END - SRAM_REGION_BEGIN
+.extern _ramsave_area_begin
 .func copy_save_data_to_ewram
 copy_save_data_to_ewram:
     push {lr}
 
-    bl detect_save_type
+    @ Dispatch on save type
+    ldr r0, =$g_cart_save_type
+    ldr r0, [r0]
 
-    @ TODO
+    cmp r0, $CART_SAVE_TYPE_UNKNOWN
+    beq .Lcopy_save_data_to_ewram_type_UNKNOWN
+    cmp r0, $CART_SAVE_TYPE_EEPROM
+    beq .Lcopy_save_data_to_ewram_type_EEPROM
+    cmp r0, $CART_SAVE_TYPE_SRAM
+    beq .Lcopy_save_data_to_ewram_type_SRAM
+    cmp r0, $CART_SAVE_TYPE_FLASH
+    beq .Lcopy_save_data_to_ewram_type_FLASH
+    cmp r0, $CART_SAVE_TYPE_FLASH512
+    beq .Lcopy_save_data_to_ewram_type_FLASH512
+    cmp r0, $CART_SAVE_TYPE_FLASH1M
+    beq .Lcopy_save_data_to_ewram_type_FLASH1M
+    b .Lcopy_save_data_to_ewram_type_UNKNOWN
+
+.Lcopy_save_data_to_ewram_type_UNKNOWN:
+    bl m3_clear_screen
+    ldr r0, =$no_save_type_found_msg
+    mov r1, $0
+    mov r2, $0
+    bl m3_puts
     bl panic
+    b .Lcopy_save_data_to_ewram_done
+
+.Lcopy_save_data_to_ewram_type_SRAM:
+    bl print_copying_save_to_wram
+    ldr r0, =$SRAM_REGION_BEGIN
+    ldr r1, =$_ramsave_area_begin
+    ldr r2, =$SRAM_REGION_SIZE
+    bl ram_memcpy8
+    b .Lcopy_save_data_to_ewram_done
+
+.Lcopy_save_data_to_ewram_type_EEPROM:
+.Lcopy_save_data_to_ewram_type_FLASH:
+.Lcopy_save_data_to_ewram_type_FLASH512:
+.Lcopy_save_data_to_ewram_type_FLASH1M:
+    bl m3_clear_screen
+    ldr r0, =$unimplelemented_msg
+    mov r1, $0
+    mov r2, $0
+    bl m3_puts
+    ldr r1, =$g_cart_save_type
+    ldr r1, [r1]
+    mov r0, $4
+    mul r1, r0
+    ldr r0, =$cart_save_type_pattern_table
+    add r0, r1
+    ldr r0, [r0]
+    mov r1, $1
+    mov r2, $0
+    bl m3_puts
+    bl panic
+    b .Lcopy_save_data_to_ewram_done
+
+.Lcopy_save_data_to_ewram_done:
+    pop {pc}
+.endfunc
+
+
+.func print_copying_save_to_wram
+print_copying_save_to_wram:
+    push {lr}
+
+    bl m3_clear_screen
+
+    ldr r0, =$copying_save_to_wram_msg
+    mov r1, $0
+    mov r2, $0
+    bl m3_puts
+
+    ldr r1, =$g_cart_save_type
+    ldr r1, [r1]
+    mov r0, $4
+    mul r1, r0
+    ldr r0, =$cart_save_type_pattern_table
+    add r0, r1
+    ldr r0, [r0]
+    mov r1, $1
+    mov r2, $0
+    bl m3_puts
 
     pop {pc}
 .endfunc
@@ -386,7 +471,7 @@ copy_save_data_to_ewram:
 .set ROM_REGION_END_ADDR, 0x09FFFFFF
 .func detect_save_type
 detect_save_type:
-    push {r4-r6, lr}
+    push {r4-r7, lr}
     
     ralignment .req r4
     ri .req r5
@@ -417,21 +502,45 @@ detect_save_type:
     ldr r1, =$ROM_REGION_BEGIN_ADDR
     ldr r2, =$ROM_REGION_END_ADDR
     mov r3, ralignment
+    mov r7, r0
 
     bl scan_memory
+
+    cmp r0, $0
+    bne .Ldetect_save_type_found
 
     add ri, $1
     b .Ldetect_save_type_loop_begin
 
 .Ldetect_save_type_found:
+    ldr r0, =$g_cart_save_type
+    str ri, [r0]
+    bl m3_clear_screen
+    ldr r0, =$detected_save_type_msg
+    mov r1, $0
+    mov r2, $0
+    bl m3_puts
+    mov r0, r7
+    mov r1, $1
+    bl m3_puts
+
+    b .Ldetect_save_type_done
+
 .Ldetect_save_type_not_found:
+    bl m3_clear_screen
+    ldr r0, =$no_save_type_found_msg
+    mov r1, $0
+    mov r2, $0
+    bl m3_puts
+    bl panic
+
     b .Ldetect_save_type_done
 
 .Ldetect_save_type_done:
     .unreq ralignment
     .unreq ri
 
-    pop {r4-r6, pc}
+    pop {r4-r7, pc}
 .endfunc
 
 
@@ -458,6 +567,7 @@ scan_memory:
 
     mov r0, rpattern_ptr
     mov r1, rsearch_region_begin_ptr
+    bl strcmp
 
     cmp r0, $0
     beq .Lscan_memory_found
@@ -467,9 +577,11 @@ scan_memory:
 
 .Lscan_memory_not_found:
     mov r0, $0
+    b .Lscan_memory_done
 
 .Lscan_memory_found:
     mov r0, rsearch_region_begin_ptr
+    b .Lscan_memory_done
 
 .Lscan_memory_done:
     .unreq rpattern_ptr
@@ -492,11 +604,11 @@ strcmp:
     rstr1char .req r3
 
 .Lstrcmp_loop_begin:
-    ldr rstr0char, [rstr0ptr]
+    ldrb rstr0char, [rstr0ptr]
     cmp rstr0char, $0
     beq .Lstrcmp_match
 
-    ldr rstr1char, [rstr1ptr]
+    ldrb rstr1char, [rstr1ptr]
     cmp rstr0char, rstr1char
     bne .Lstrcmp_mismatch
 
@@ -523,10 +635,64 @@ strcmp:
 
 .func copy_ewram_to_save_data
 copy_ewram_to_save_data:
-    @ TODO
+    push {lr}
+
+    @ Dispatch on save type
+    ldr r0, =$g_cart_save_type
+    ldr r0, [r0]
+
+    cmp r0, $CART_SAVE_TYPE_UNKNOWN
+    beq .Lcopy_save_data_to_ewram_type_UNKNOWN
+    cmp r0, $CART_SAVE_TYPE_EEPROM
+    beq .Lcopy_save_data_to_ewram_type_EEPROM
+    cmp r0, $CART_SAVE_TYPE_SRAM
+    beq .Lcopy_save_data_to_ewram_type_SRAM
+    cmp r0, $CART_SAVE_TYPE_FLASH
+    beq .Lcopy_save_data_to_ewram_type_FLASH
+    cmp r0, $CART_SAVE_TYPE_FLASH512
+    beq .Lcopy_save_data_to_ewram_type_FLASH512
+    cmp r0, $CART_SAVE_TYPE_FLASH1M
+    beq .Lcopy_save_data_to_ewram_type_FLASH1M
+    b .Lcopy_save_data_to_ewram_type_UNKNOWN
+
+.Lcopy_ewram_to_save_data_type_UNKNOWN:
+    bl m3_clear_screen
+    ldr r0, =$no_save_type_found_msg
+    mov r1, $0
+    mov r2, $0
+    bl m3_puts
     bl panic
-    bx lr
+    b .Lcopy_save_data_to_ewram_done
+
+.Lcopy_ewram_to_save_data_type_SRAM:
+.Lcopy_ewram_to_save_data_type_EEPROM:
+.Lcopy_ewram_to_save_data_type_FLASH:
+.Lcopy_ewram_to_save_data_type_FLASH512:
+.Lcopy_ewram_to_save_data_type_FLASH1M:
+    bl m3_clear_screen
+    ldr r0, =$unimplelemented_msg
+    mov r1, $0
+    mov r2, $0
+    bl m3_puts
+    ldr r1, =$g_cart_save_type
+    ldr r1, [r1]
+    mov r0, $4
+    mul r1, r0
+    ldr r0, =$cart_save_type_pattern_table
+    add r0, r1
+    ldr r0, [r0]
+    mov r1, $1
+    mov r2, $0
+    bl m3_puts
+    bl panic
+    b .Lcopy_save_data_to_ewram_done
+
+.Lcopy_save_data_to_ewram_done:
+    pop {pc}
 .endfunc
+
+
+.section .text.ram.1
 
 
 .set REG_DISPCNT, 0x04000000
@@ -564,7 +730,17 @@ print_swap_to_oem:
 enable_irq:
     ldr r0, =$REG_IE
     ldr r1, =$GAMEPAK_MASK
+
+    ldr r2, =$g_is_in_mgba
+    ldr r2, [r2]
+    cmp r2, $1
+    bne .Lenable_irq_real_hardware
+    ldr r2, =$KEYPAD_MASK
+    orr r1, r2
+
+.Lenable_irq_real_hardware:
     str r1, [r0]
+
     ldr r0, =$REG_IME
     mov r1, $1
     str r1, [r0]
@@ -596,7 +772,12 @@ thumb_master_isr:
     beq .Lthumb_master_isr_known_interrupt
     b .Lthumb_master_isr_unknown_interrupt
 .Lthumb_master_isr_known_interrupt:
+    push {r1}
     bl handle_gamepak_interrupt
+    pop {r1}
+    ldr r0, =$REG_IF
+    strh r1, [r0]
+
     pop {r0}
     bx r0
 
@@ -662,6 +843,9 @@ handle_gamepak_interrupt:
     b .Lhandle_gamepak_interrupt_done
 
 .Lhandle_gamepak_interrupt_OEM_CART_REMOVED:
+    ldr r0, =$g_cart_swap_stage
+    mov r1, $CARTSWAP_STAGE_FLASHCART_REINSERTED
+    str r1, [r0]
     bl on_flash_cart_reinserted
     b .Lhandle_gamepak_interrupt_done
 
@@ -674,10 +858,6 @@ handle_gamepak_interrupt:
     bl panic
 
 .Lhandle_gamepak_interrupt_done:
-    ldr r0, =$REG_IF
-    ldr r1, =$GAMEPAK_MASK
-    strh r1, [r0]
-
     pop {pc}
 .endfunc
 
@@ -685,7 +865,8 @@ handle_gamepak_interrupt:
 .set SWI_HALT_THUMB, 0x02
 .func halt
 halt:
-    swi $SWI_HALT_THUMB
+    @ TODO real swi
+    @swi $SWI_HALT_THUMB
     b halt
     bl panic
 .endfunc
@@ -900,6 +1081,13 @@ m3_puts:
     mov r1, rtarget_gliph_row
     mov r2, rtarget_gliph_col
     add r2, ri
+    mov r3, $30
+    cmp r2, r3
+    blt .Lm3_puts_putc
+    add r1, $1
+    sub r2, $30
+
+.Lm3_puts_putc:
     bl m3_putc
     pop {r0-r3}
 
@@ -951,9 +1139,8 @@ m3_clear_screen:
 panic:
     push {lr}
 
-    bl m3_clear_screen
     ldr r0, =$panic_msg
-    mov r1, $0
+    mov r1, $3
     mov r2, $0
     bl m3_puts
 
@@ -1082,15 +1269,15 @@ all_done_msg:
 cart_save_type_pattern_UNKNOWN:
     .asciz "BAD"
 cart_save_type_pattern_EEPROM:
-    .asciz "EEPROM_V"
+    .asciz "EEPROM_"
 cart_save_type_pattern_SRAM:
-    .asciz "SRAM_V"
+    .asciz "SRAM_"
 cart_save_type_pattern_FLASH:
-    .asciz "FLASH_V"
+    .asciz "FLASH_"
 cart_save_type_pattern_FLASH512:
-    .asciz "FLASH512_V"
+    .asciz "FLASH512_"
 cart_save_type_pattern_FLASH1M:
-    .asciz "FLASH1M_V"
+    .asciz "FLASH1M_"
 
 .align 2
 cart_save_type_pattern_table:
@@ -1106,3 +1293,15 @@ scanning_for_save_type_msg:
 
 press_a_to_continue_msg:
     .asciz "Press A when done"
+
+detected_save_type_msg:
+    .asciz "Save type detected, dumping..."
+
+no_save_type_found_msg:
+    .asciz "Did not detect save type, please restart"
+
+unimplelemented_msg:
+    .asciz "Unimplemented"
+
+copying_save_to_wram_msg:
+    .asciz "Copying save to WRAM"

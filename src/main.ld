@@ -21,7 +21,7 @@ SECTIONS {
     } >ROM
 
     .text.ram : {
-        *(.text.ram)
+        *(.text.ram*)
         . = ALIGN(4);
     } >EWRAM AT>ROM
     _ramtext_vma_begin = ADDR(.text.ram);
@@ -39,7 +39,7 @@ SECTIONS {
     _ramrodata_lma_end = LOADADDR(.rodata.ram) + SIZEOF(.rodata.ram);
 
     .data.ram : {
-        KEEP(*(.data.ram))
+        KEEP(*(.data.ram*))
         . = ALIGN(4);
     } >EWRAM AT>ROM
     _ramdata_vma_begin = ADDR(.data.ram);
