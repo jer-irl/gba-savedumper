@@ -68,13 +68,6 @@ init:
     msr cpsr_fc, r0
     ldr sp, =SYS_STACK
 
-    .if MGBA_LOG_ENABLE
-    ldr r0, =0xC0DE
-    ldr r1, =$MGBA_LOG_REG_ENABLE
-    strh r0, [r1]
-    .endif
-
-
     bl copy_code_to_wram
 
     @ Branch to main(), switching to THUMB state
@@ -171,6 +164,19 @@ rom_memcpy16:
 
 .func main
 main:
+    @ Detect mgba
+    ldr r0, =0xC0DE
+    ldr r1, =$MGBA_LOG_REG_ENABLE
+    strh r0, [r1]
+    ldrh r1, [r1]
+    ldr r0, =0x1DEA
+    cmp r0, r1
+    bne .Lmain_real_hw
+    ldr r0, =$g_is_in_mgba
+    mov r1, $1
+    str r1, [r0]
+
+.Lmain_real_hw:
     mov r0, $CARTSWAP_STAGE_FLASHCART_LOADED
     ldr r1, =$g_cart_swap_stage
     str r0, [r1]
@@ -194,6 +200,8 @@ main:
     bl panic
 .endfunc
 
+
+.set REG_KEYCNT, 0x04000132
 .func on_flash_cart_removed
 on_flash_cart_removed:
     push {lr}
@@ -204,11 +212,25 @@ on_flash_cart_removed:
 
     @ No work to do here...
 
-    mov r1, $CARTSWAP_STAGE_OEM_SAVE_NOT_YET_LOADED
+    mov r1, $CARTSWAP_STAGE_FLASHCART_REMOVED
     str r1, [r0]
 
     bl print_insert_oem_cart
 
+    ldr r0, =$g_is_in_mgba
+    cmp r0, $1
+    bne .Lon_flash_cart_removed_done
+    @ Enable button control because mgba doesn't raise gamepak interrupt
+    @ when swapping roms
+    ldr r0, =$press_a_to_continue_msg
+    mov r1, $1
+    mov r2, $0
+    bl m3_puts
+    ldr r0, =$0b0100000000000001 @ enables A button interrupt
+    ldr r1, =$REG_KEYCNT
+    strh r0, [r1]
+
+.Lon_flash_cart_removed_done:
     @ Already in interrupt, just return
     pop {pc}
 
@@ -366,26 +388,31 @@ copy_save_data_to_ewram:
 detect_save_type:
     push {r4-r6, lr}
     
+    ralignment .req r4
+    ri .req r5
+
+    mov ralignment, $4
+    mov ri, $1
+.Ldetect_save_type_loop_begin:
+    cmp ri, $NUM_CART_SAVE_TYPES
+    beq .Ldetect_save_type_not_found
+
     bl m3_clear_screen
     ldr r0, =$scanning_for_save_type_msg
     mov r1, $0
     mov r2, $0
     bl m3_puts
 
-    ralignment .req r4
-    ri .req r5
-
-    mov ralignment, $4
-    mov ri, $0
-.Ldetect_save_type_loop_begin:
-    cmp ri, $NUM_CART_SAVE_TYPES
-    beq .Ldetect_save_type_not_found
-
     ldr r0, =$cart_save_type_pattern_table
     mov r6, ralignment
     mul r6, ri
     add r0, r6
     ldr r0, [r0]
+
+    mov r1, $1
+    push {r0-r3}
+    bl m3_puts
+    pop {r0-r3}
 
     ldr r1, =$ROM_REGION_BEGIN_ADDR
     ldr r2, =$ROM_REGION_END_ADDR
@@ -555,6 +582,7 @@ setup_isr:
 .endfunc
 
 
+.set KEYPAD_MASK, 0b0001000000000000
 .func thumb_master_isr
 thumb_master_isr:
     push {lr}
@@ -562,10 +590,15 @@ thumb_master_isr:
     ldrh r0, [r0]
     ldr r1, =$GAMEPAK_MASK
     cmp r0, r1
-    bne .Lthumb_master_isr_unknown_interrupt
+    beq .Lthumb_master_isr_known_interrupt
+    ldr r1, =$KEYPAD_MASK
+    cmp r0, r1
+    beq .Lthumb_master_isr_known_interrupt
+    b .Lthumb_master_isr_unknown_interrupt
 .Lthumb_master_isr_known_interrupt:
     bl handle_gamepak_interrupt
-    pop {pc}
+    pop {r0}
+    bx r0
 
 .Lthumb_master_isr_unknown_interrupt:
     bl m3_clear_screen
@@ -613,6 +646,9 @@ handle_gamepak_interrupt:
     b .Lhandle_gamepak_interrupt_done
 
 .Lhandle_gamepak_interrupt_FLASHCART_REMOVED:
+    ldr r0, =$g_cart_swap_stage
+    mov r1, $CARTSWAP_STAGE_OEM_SAVE_NOT_YET_LOADED
+    str r1, [r0]
     bl on_oem_cart_inserted
     b .Lhandle_gamepak_interrupt_done
 
@@ -638,6 +674,10 @@ handle_gamepak_interrupt:
     bl panic
 
 .Lhandle_gamepak_interrupt_done:
+    ldr r0, =$REG_IF
+    ldr r1, =$GAMEPAK_MASK
+    strh r1, [r0]
+
     pop {pc}
 .endfunc
 
@@ -645,9 +685,8 @@ handle_gamepak_interrupt:
 .set SWI_HALT_THUMB, 0x02
 .func halt
 halt:
-    @ TODO REPLACE WITH SWI
+    swi $SWI_HALT_THUMB
     b halt
-    @swi $SWI_HALT_THUMB
     bl panic
 .endfunc
 
@@ -948,6 +987,7 @@ master_isr:
 .set CARTSWAP_STAGE_OEM_CART_REMOVED, 5
 .set CARTSWAP_STAGE_FLASHCART_REINSERTED, 6
 .set CARTSWAP_STAGE_OEM_SAVE_DUMPED, 7
+.align 2
 g_cart_swap_stage:
     .word 0x00000000
 
@@ -959,7 +999,12 @@ g_cart_swap_stage:
 .set CART_SAVE_TYPE_FLASH512, 4
 .set CART_SAVE_TYPE_FLASH1M, 5
 .set NUM_CART_SAVE_TYPES, 6
+.align 2
 g_cart_save_type:
+    .word 0x00000000
+
+.align 2
+g_is_in_mgba:
     .word 0x00000000
 
 
@@ -1058,3 +1103,6 @@ cart_save_type_pattern_table:
 
 scanning_for_save_type_msg:
     .asciz "Scanning rom for save type"
+
+press_a_to_continue_msg:
+    .asciz "Press A when done"
