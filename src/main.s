@@ -12,9 +12,32 @@
 .set MGBA_LOG_ERROR, 1
 
 
+.macro m3_print row s:vararg
+.pushsection .rodata.ram
+.Lstring_\@:
+    .asciz \s
+.popsection
+    push {r0-r3}
+    ldr r0, =$.Lstring_\@
+    mov r1, $\row
+    mov r2, $0
+    bl m3_puts
+    pop {r0-r3}
+.endm
+
+
+.macro m3_clr_print s:vararg
+    push {r0-r3}
+    bl m3_clear_screen
+    pop {r0-r3}
+    m3_print 0 \s
+.endm
+
+
 .global _start
 _start:
     b init
+
 
 header:
     @ Nintendo logo; 156 bytes
@@ -51,7 +74,7 @@ end_header:
 .word 0xEA000000 @ b 0
 
 .align 2
-.asciz "FLASH1M_Vnnn"
+.asciz "SRAM_Vnnn"
 
 .align 2
 .set IRQ_MODE, 0x12
@@ -140,27 +163,6 @@ rom_memcpy16:
 .section .text.ram.0
 .thumb
 
-.if MGBA_LOG_ENABLE
-.macro mgba_log str_begin_label, str_end_label
-    @ push {r0, r1, r2, lr, r3}
-    @ ldr r0, =\str_begin_label
-    @ ldr r1, =$MGBA_LOG_STRING
-    @ .set mgba_msg_len, hello_msg_end - hello_msg_start
-    @ ldr r2, =$mgba_msg_len
-    @ bl ram_memcpy8
-
-    @ ldr r0, =$MGBA_LOG_REG_FLAGS
-    @ ldr r1, =$MGBA_LOG_ERROR | 0x100
-    @ strh r1, [r0]
-    @ pop {r0, r1, r2, r3}
-    @ mov lr, r3
-    @ pop {r3}
-.endm
-.else
-.macro mgba_log str_begin_label, str_end_label
-.endm
-.endif
-
 
 .func main
 main:
@@ -193,7 +195,7 @@ main:
     ldr r0, [r0]
     cmp r0, $CARTSWAP_STAGE_FLASHCART_LOADED
     bne .Lmain_goto_panic
-    bl print_remove_flash_cart
+    m3_clr_print "Please remove cartridge"
     bl halt
 
 .Lmain_goto_panic:
@@ -215,7 +217,7 @@ on_flash_cart_removed:
     mov r1, $CARTSWAP_STAGE_FLASHCART_REMOVED
     str r1, [r0]
 
-    bl print_insert_oem_cart
+    m3_clr_print "Insert OEM cart"
 
     ldr r0, =$g_is_in_mgba
     ldr r0, [r0]
@@ -223,10 +225,7 @@ on_flash_cart_removed:
     bne .Lon_flash_cart_removed_done
     @ Enable button control because mgba doesn't raise gamepak interrupt
     @ when swapping roms
-    ldr r0, =$press_a_to_continue_msg
-    mov r1, $1
-    mov r2, $0
-    bl m3_puts
+    m3_print 1 "in mgba press A to continue"
     ldr r0, =$0b0100000000000001 @ enables A button interrupt
     ldr r1, =$REG_KEYCNT
     strh r0, [r1]
@@ -256,7 +255,7 @@ on_oem_cart_inserted:
     mov r1, $CARTSWAP_STAGE_OEM_SAVE_LOADED
     str r1, [r0]
 
-    bl print_remove_oem_cart
+    m3_clr_print "Remove OEM cart"
 
     @ Already in interrupt, just return
     pop {pc}
@@ -279,8 +278,20 @@ on_oem_cart_removed:
     mov r1, $CARTSWAP_STAGE_OEM_CART_REMOVED
     str r1, [r0]
 
-    bl print_insert_flash_cart
+    m3_clr_print "Re-insert flash cart"
 
+    ldr r0, =$g_is_in_mgba
+    ldr r0, [r0]
+    cmp r0, $1
+    bne .Lon_oem_cart_removed_done
+    @ Enable button control because mgba doesn't raise gamepak interrupt
+    @ when swapping roms
+    m3_print 1 "in mgba press A to continue"
+    ldr r0, =$0b0100000000000001 @ enables A button interrupt
+    ldr r1, =$REG_KEYCNT
+    strh r0, [r1]
+
+.Lon_oem_cart_removed_done:
     @ Already in interrupt, just return
     pop {pc}
 
@@ -313,48 +324,6 @@ on_flash_cart_reinserted:
 
 .Lon_flash_cart_reinserted_goto_panic:
     bl panic
-.endfunc
-
-
-.func print_remove_flash_cart
-print_remove_flash_cart:
-    push {lr}
-
-    bl m3_clear_screen
-    ldr r0, =$remove_cart_message
-    mov r1, $0
-    mov r2, $0
-    bl m3_puts
-
-    pop {pc}
-.endfunc
-
-
-.func print_insert_oem_cart
-print_insert_oem_cart:
-    push {lr}
-
-    bl m3_clear_screen
-    ldr r0, =$insert_oem_cart_msg
-    mov r1, $0
-    mov r2, $0
-    bl m3_puts
-
-    pop {pc}
-.endfunc
-
-
-.func print_remove_oem_cart
-print_remove_oem_cart:
-    push {lr}
-
-    bl m3_clear_screen
-    ldr r0, =$remove_oem_cart_msg
-    mov r1, $0
-    mov r2, $0
-    bl m3_puts
-
-    pop {pc}
 .endfunc
 
 
@@ -399,11 +368,7 @@ copy_save_data_to_ewram:
     b .Lcopy_save_data_to_ewram_type_UNKNOWN
 
 .Lcopy_save_data_to_ewram_type_UNKNOWN:
-    bl m3_clear_screen
-    ldr r0, =$no_save_type_found_msg
-    mov r1, $0
-    mov r2, $0
-    bl m3_puts
+    m3_clr_print "No save type found :("
     bl panic
     b .Lcopy_save_data_to_ewram_done
 
@@ -446,12 +411,7 @@ copy_save_data_to_ewram:
 print_copying_save_to_wram:
     push {lr}
 
-    bl m3_clear_screen
-
-    ldr r0, =$copying_save_to_wram_msg
-    mov r1, $0
-    mov r2, $0
-    bl m3_puts
+    m3_clr_print "Copying save to WRAM"
 
     ldr r1, =$g_cart_save_type
     ldr r1, [r1]
@@ -482,11 +442,7 @@ detect_save_type:
     cmp ri, $NUM_CART_SAVE_TYPES
     beq .Ldetect_save_type_not_found
 
-    bl m3_clear_screen
-    ldr r0, =$scanning_for_save_type_msg
-    mov r1, $0
-    mov r2, $0
-    bl m3_puts
+    m3_clr_print "Scanning for save type"
 
     ldr r0, =$cart_save_type_pattern_table
     mov r6, ralignment
@@ -515,23 +471,16 @@ detect_save_type:
 .Ldetect_save_type_found:
     ldr r0, =$g_cart_save_type
     str ri, [r0]
-    bl m3_clear_screen
-    ldr r0, =$detected_save_type_msg
-    mov r1, $0
-    mov r2, $0
-    bl m3_puts
+    m3_clr_print "Detected save type, printing"
     mov r0, r7
     mov r1, $1
+    mov r2, $0
     bl m3_puts
 
     b .Ldetect_save_type_done
 
 .Ldetect_save_type_not_found:
-    bl m3_clear_screen
-    ldr r0, =$no_save_type_found_msg
-    mov r1, $0
-    mov r2, $0
-    bl m3_puts
+    m3_clr_print "No save type found, please restart"
     bl panic
 
     b .Ldetect_save_type_done
@@ -642,29 +591,32 @@ copy_ewram_to_save_data:
     ldr r0, [r0]
 
     cmp r0, $CART_SAVE_TYPE_UNKNOWN
-    beq .Lcopy_save_data_to_ewram_type_UNKNOWN
+    beq .Lcopy_ewram_to_save_data_type_UNKNOWN
     cmp r0, $CART_SAVE_TYPE_EEPROM
-    beq .Lcopy_save_data_to_ewram_type_EEPROM
+    beq .Lcopy_ewram_to_save_data_type_EEPROM
     cmp r0, $CART_SAVE_TYPE_SRAM
-    beq .Lcopy_save_data_to_ewram_type_SRAM
+    beq .Lcopy_ewram_to_save_data_type_SRAM
     cmp r0, $CART_SAVE_TYPE_FLASH
-    beq .Lcopy_save_data_to_ewram_type_FLASH
+    beq .Lcopy_ewram_to_save_data_type_FLASH
     cmp r0, $CART_SAVE_TYPE_FLASH512
-    beq .Lcopy_save_data_to_ewram_type_FLASH512
+    beq .Lcopy_ewram_to_save_data_type_FLASH512
     cmp r0, $CART_SAVE_TYPE_FLASH1M
-    beq .Lcopy_save_data_to_ewram_type_FLASH1M
-    b .Lcopy_save_data_to_ewram_type_UNKNOWN
+    beq .Lcopy_ewram_to_save_data_type_FLASH1M
+    b .Lcopy_ewram_to_save_data_type_UNKNOWN
 
 .Lcopy_ewram_to_save_data_type_UNKNOWN:
-    bl m3_clear_screen
-    ldr r0, =$no_save_type_found_msg
-    mov r1, $0
-    mov r2, $0
-    bl m3_puts
+    m3_clr_print "No save type detected, please restart"
     bl panic
-    b .Lcopy_save_data_to_ewram_done
+    b .Lcopy_ewram_to_save_data_done
 
 .Lcopy_ewram_to_save_data_type_SRAM:
+    m3_clr_print "Dumping save now"
+    ldr r0, =$_ramsave_area_begin
+    ldr r1, =$SRAM_REGION_BEGIN
+    ldr r2, =$SRAM_REGION_SIZE
+    bl ram_memcpy8
+    b .Lcopy_ewram_to_save_data_done
+
 .Lcopy_ewram_to_save_data_type_EEPROM:
 .Lcopy_ewram_to_save_data_type_FLASH:
 .Lcopy_ewram_to_save_data_type_FLASH512:
@@ -685,9 +637,9 @@ copy_ewram_to_save_data:
     mov r2, $0
     bl m3_puts
     bl panic
-    b .Lcopy_save_data_to_ewram_done
+    b .Lcopy_ewram_to_save_data_done
 
-.Lcopy_save_data_to_ewram_done:
+.Lcopy_ewram_to_save_data_done:
     pop {pc}
 .endfunc
 
@@ -707,13 +659,6 @@ setup_screen:
     ldr r0, =$TARGET_VIDEO_MODE
     ldr r1, =$REG_DISPCNT
     strh r0, [r1]
-    bx lr
-.endfunc
-
-
-.func print_swap_to_oem
-print_swap_to_oem:
-    @ TODO
     bx lr
 .endfunc
 
@@ -1288,20 +1233,5 @@ cart_save_type_pattern_table:
     .word cart_save_type_pattern_FLASH512
     .word cart_save_type_pattern_FLASH1M
 
-scanning_for_save_type_msg:
-    .asciz "Scanning rom for save type"
-
-press_a_to_continue_msg:
-    .asciz "Press A when done"
-
-detected_save_type_msg:
-    .asciz "Save type detected, dumping..."
-
-no_save_type_found_msg:
-    .asciz "Did not detect save type, please restart"
-
 unimplelemented_msg:
     .asciz "Unimplemented"
-
-copying_save_to_wram_msg:
-    .asciz "Copying save to WRAM"
