@@ -195,11 +195,6 @@ main:
     bl setup_screen
     bl m3_clear_screen
 
-    m3_log "Hello"
-    m3_log "THERE"
-    m3_log "MY DEAR FRIEND"
-    m3_log "SEB"
-
     bl setup_isr
     bl enable_irq
 
@@ -256,7 +251,7 @@ on_flash_cart_removed:
     bne .Lon_flash_cart_removed_done
     @ Enable button control because mgba doesn't raise gamepak interrupt
     @ when swapping roms
-    m3_print 1 "in mgba press A to continue"
+    m3_log "in mgba press A to continue"
     ldr r0, =$0b0100000000000001 @ enables A button interrupt
     ldr r1, =$REG_KEYCNT
     strh r0, [r1]
@@ -317,7 +312,7 @@ on_oem_cart_removed:
     bne .Lon_oem_cart_removed_done
     @ Enable button control because mgba doesn't raise gamepak interrupt
     @ when swapping roms
-    m3_print 1 "in mgba press A to continue"
+    m3_log "in mgba press A to continue"
     ldr r0, =$0b0100000000000001 @ enables A button interrupt
     ldr r1, =$REG_KEYCNT
     strh r0, [r1]
@@ -329,7 +324,9 @@ on_oem_cart_removed:
 .Lon_oem_cart_removed_goto_panic:
     bl panic
 .endfunc
-    
+ 
+
+.set REG_KEYINPUT, 0x04000130
 .func on_flash_cart_reinserted
 on_flash_cart_reinserted:
     push {lr}
@@ -339,6 +336,26 @@ on_flash_cart_reinserted:
     cmp r1, $CARTSWAP_STAGE_FLASHCART_REINSERTED
     bne .Lon_flash_cart_reinserted_goto_panic
 
+    @ If real hardware, need to jump to flash card and hope we end up back here
+    ldr r2, =$g_is_in_mgba
+    cmp r2, $0
+    bne .Lon_flash_cart_reinserted_in_mgba
+    @ cross fingers and jump to ARM ROM
+    m3_log "Need to jump to flash cart"
+    m3_log "Reopen this custom rom"
+    m3_log "Press A when ready"
+    ldr r0, =$REG_KEYINPUT
+.Lon_flash_cart_reinserted_await_A_press:
+    ldr r1, [r0]
+    mov r2, $1
+    and r1, r2
+    cmp r1, $0
+    bne .Lon_flash_cart_reinserted_await_A_press
+
+    ldr r0, =$0x08000000
+    bx r0
+
+.Lon_flash_cart_reinserted_in_mgba:
     @ Copy save data from EWRAM to new cart sram
     push {r0}
     bl copy_ewram_to_save_data
@@ -359,7 +376,7 @@ on_flash_cart_reinserted:
 
 
 .set SRAM_REGION_BEGIN, 0x0E000000
-.set SRAM_REGION_END, 0x0E00FFFF
+.set SRAM_REGION_END, 0x0E010000
 .set SRAM_REGION_SIZE, SRAM_REGION_END - SRAM_REGION_BEGIN
 .extern _ramsave_area_begin
 .func copy_save_data_to_ewram
@@ -401,10 +418,7 @@ copy_save_data_to_ewram:
 .Lcopy_save_data_to_ewram_type_FLASH:
 .Lcopy_save_data_to_ewram_type_FLASH512:
 .Lcopy_save_data_to_ewram_type_FLASH1M:
-    ldr r0, =$unimplelemented_msg
-    mov r1, $0
-    mov r2, $0
-    bl m3_puts
+    m3_log "Unimplemented"
     ldr r1, =$g_cart_save_type
     ldr r1, [r1]
     mov r0, $4
@@ -412,9 +426,7 @@ copy_save_data_to_ewram:
     ldr r0, =$cart_save_type_pattern_table
     add r0, r1
     ldr r0, [r0]
-    mov r1, $1
-    mov r2, $0
-    bl m3_puts
+    bl m3_log_impl
     bl panic
     b .Lcopy_save_data_to_ewram_done
 
@@ -436,9 +448,7 @@ print_copying_save_to_wram:
     ldr r0, =$cart_save_type_pattern_table
     add r0, r1
     ldr r0, [r0]
-    mov r1, $1
-    mov r2, $0
-    bl m3_puts
+    bl m3_log_impl
 
     pop {pc}
 .endfunc
@@ -465,11 +475,8 @@ detect_save_type:
     mul r6, ri
     add r0, r6
     ldr r0, [r0]
-
-    mov r1, $1
-    mov r2, $0
     push {r0-r3}
-    bl m3_puts
+    bl m3_log_impl
     pop {r0-r3}
 
     ldr r1, =$ROM_REGION_BEGIN_ADDR
@@ -488,11 +495,9 @@ detect_save_type:
 .Ldetect_save_type_found:
     ldr r0, =$g_cart_save_type
     str ri, [r0]
-    m3_log "Detected save type, printing"
+    m3_log "Detected save type"
     mov r0, r7
-    mov r1, $1
-    mov r2, $0
-    bl m3_puts
+    bl m3_log_impl
 
     b .Ldetect_save_type_done
 
@@ -738,10 +743,7 @@ thumb_master_isr:
     bx r0
 
 .Lthumb_master_isr_unknown_interrupt:
-    ldr r0, =$bad_interrupt_msg
-    mov r1, $0
-    mov r2, $0
-    bl m3_puts
+    m3_log "Bad Interrupt"
     bl panic
 .endfunc
 
@@ -1042,6 +1044,31 @@ m3_puts:
     b .Lm3_puts_loop_begin
 .Lm3_puts_loop_end:
 
+@ Need to erase rest of line
+.Lm3_puts_loop2_begin:
+    cmp ri, $M3_GLIPHS_PER_ROW
+    bge .Lm3_puts_loop2_end
+
+    push {r0-r3}
+    mov r0, $' '
+    mov r1, rtarget_gliph_row
+    mov r2, rtarget_gliph_col
+    add r2, ri
+    mov r3, $30
+    cmp r2, r3
+    blt .Lm3_puts_putc2
+    add r1, $1
+    sub r2, $30
+
+.Lm3_puts_putc2:
+    bl m3_putc
+    pop {r0-r3}
+
+    add ri, $1
+    b .Lm3_puts_loop2_begin
+
+.Lm3_puts_loop2_end:
+
     .unreq ri
     .unreq rchar
 
@@ -1167,10 +1194,7 @@ m3_clear_screen:
 panic:
     push {lr}
 
-    ldr r0, =$panic_msg
-    mov r1, $3
-    mov r2, $0
-    bl m3_puts
+    m3_log "Unrecoverable error, panic!"
 
     @ TODO
 .Lpanic_infinite_loop:
