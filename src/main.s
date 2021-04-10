@@ -12,6 +12,10 @@
 .set MGBA_LOG_ERROR, 1
 
 
+.extern _magic_location
+.set MAGIC, 0xDEADBEEF
+
+
 .macro m3_print row s:vararg
 .pushsection .rodata.ram
 .Lstring_\@:
@@ -26,11 +30,15 @@
 .endm
 
 
-.macro m3_clr_print s:vararg
+.macro m3_log s:vararg
+.pushsection .rodata.ram
+.Lstring_\@:
+    .asciz \s
+.popsection
     push {r0-r3}
-    bl m3_clear_screen
+    ldr r0, =$.Lstring_\@
+    bl m3_log_impl
     pop {r0-r3}
-    m3_print 0 \s
 .endm
 
 
@@ -187,15 +195,38 @@ main:
     bl setup_screen
     bl m3_clear_screen
 
+    m3_log "Hello"
+    m3_log "THERE"
+    m3_log "MY DEAR FRIEND"
+    m3_log "SEB"
+
     bl setup_isr
     bl enable_irq
+
+    ldr r0, =$_magic_location
+    ldr r2, [r0]
+    ldr r1, =$MAGIC
+    cmp r2, r1
+    beq .Lmain_magic_present
+    b .Lmain_magic_absent
+
+.Lmain_magic_absent:
+    @ Write magic
+    str r1, [r0]
 
     @ Cart swap
     ldr r0, =$g_cart_swap_stage
     ldr r0, [r0]
     cmp r0, $CARTSWAP_STAGE_FLASHCART_LOADED
     bne .Lmain_goto_panic
-    m3_clr_print "Please remove cartridge"
+    m3_log "Please remove cartridge"
+    bl halt
+
+.Lmain_magic_present:
+    ldr r0, =$g_cart_swap_stage
+    mov r1, $CARTSWAP_STAGE_FLASHCART_REINSERTED
+    str r1, [r0]
+    bl on_flash_cart_reinserted
     bl halt
 
 .Lmain_goto_panic:
@@ -217,7 +248,7 @@ on_flash_cart_removed:
     mov r1, $CARTSWAP_STAGE_FLASHCART_REMOVED
     str r1, [r0]
 
-    m3_clr_print "Insert OEM cart"
+    m3_log "Insert OEM cart"
 
     ldr r0, =$g_is_in_mgba
     ldr r0, [r0]
@@ -255,7 +286,7 @@ on_oem_cart_inserted:
     mov r1, $CARTSWAP_STAGE_OEM_SAVE_LOADED
     str r1, [r0]
 
-    m3_clr_print "Remove OEM cart"
+    m3_log "Remove OEM cart"
 
     @ Already in interrupt, just return
     pop {pc}
@@ -278,7 +309,7 @@ on_oem_cart_removed:
     mov r1, $CARTSWAP_STAGE_OEM_CART_REMOVED
     str r1, [r0]
 
-    m3_clr_print "Re-insert flash cart"
+    m3_log "Re-insert flash cart"
 
     ldr r0, =$g_is_in_mgba
     ldr r0, [r0]
@@ -317,27 +348,13 @@ on_flash_cart_reinserted:
     str r1, [r0]
 
     @ End
-    bl print_all_done
+    m3_log "All done!"
 
     @ Return out of the interrupt handler to halted cpu
     pop {pc}
 
 .Lon_flash_cart_reinserted_goto_panic:
     bl panic
-.endfunc
-
-
-.func print_insert_flash_cart
-print_insert_flash_cart:
-    push {lr}
-
-    bl m3_clear_screen
-    ldr r0, =$insert_flash_cart_msg
-    mov r1, $0
-    mov r2, $0
-    bl m3_puts
-
-    pop {pc}
 .endfunc
 
 
@@ -368,7 +385,7 @@ copy_save_data_to_ewram:
     b .Lcopy_save_data_to_ewram_type_UNKNOWN
 
 .Lcopy_save_data_to_ewram_type_UNKNOWN:
-    m3_clr_print "No save type found :("
+    m3_log "No save type found :("
     bl panic
     b .Lcopy_save_data_to_ewram_done
 
@@ -384,7 +401,6 @@ copy_save_data_to_ewram:
 .Lcopy_save_data_to_ewram_type_FLASH:
 .Lcopy_save_data_to_ewram_type_FLASH512:
 .Lcopy_save_data_to_ewram_type_FLASH1M:
-    bl m3_clear_screen
     ldr r0, =$unimplelemented_msg
     mov r1, $0
     mov r2, $0
@@ -411,7 +427,7 @@ copy_save_data_to_ewram:
 print_copying_save_to_wram:
     push {lr}
 
-    m3_clr_print "Copying save to WRAM"
+    m3_log "Copying save to WRAM"
 
     ldr r1, =$g_cart_save_type
     ldr r1, [r1]
@@ -442,7 +458,7 @@ detect_save_type:
     cmp ri, $NUM_CART_SAVE_TYPES
     beq .Ldetect_save_type_not_found
 
-    m3_clr_print "Scanning for save type"
+    m3_log "Scanning for save type"
 
     ldr r0, =$cart_save_type_pattern_table
     mov r6, ralignment
@@ -451,6 +467,7 @@ detect_save_type:
     ldr r0, [r0]
 
     mov r1, $1
+    mov r2, $0
     push {r0-r3}
     bl m3_puts
     pop {r0-r3}
@@ -471,7 +488,7 @@ detect_save_type:
 .Ldetect_save_type_found:
     ldr r0, =$g_cart_save_type
     str ri, [r0]
-    m3_clr_print "Detected save type, printing"
+    m3_log "Detected save type, printing"
     mov r0, r7
     mov r1, $1
     mov r2, $0
@@ -480,7 +497,7 @@ detect_save_type:
     b .Ldetect_save_type_done
 
 .Ldetect_save_type_not_found:
-    m3_clr_print "No save type found, please restart"
+    m3_log "No save type found, please restart"
     bl panic
 
     b .Ldetect_save_type_done
@@ -605,12 +622,12 @@ copy_ewram_to_save_data:
     b .Lcopy_ewram_to_save_data_type_UNKNOWN
 
 .Lcopy_ewram_to_save_data_type_UNKNOWN:
-    m3_clr_print "No save type detected, please restart"
+    m3_log "No save type detected, please restart"
     bl panic
     b .Lcopy_ewram_to_save_data_done
 
 .Lcopy_ewram_to_save_data_type_SRAM:
-    m3_clr_print "Dumping save now"
+    m3_log "Dumping save now"
     ldr r0, =$_ramsave_area_begin
     ldr r1, =$SRAM_REGION_BEGIN
     ldr r2, =$SRAM_REGION_SIZE
@@ -621,11 +638,7 @@ copy_ewram_to_save_data:
 .Lcopy_ewram_to_save_data_type_FLASH:
 .Lcopy_ewram_to_save_data_type_FLASH512:
 .Lcopy_ewram_to_save_data_type_FLASH1M:
-    bl m3_clear_screen
-    ldr r0, =$unimplelemented_msg
-    mov r1, $0
-    mov r2, $0
-    bl m3_puts
+    m3_log "Unimplemented"
     ldr r1, =$g_cart_save_type
     ldr r1, [r1]
     mov r0, $4
@@ -633,9 +646,7 @@ copy_ewram_to_save_data:
     ldr r0, =$cart_save_type_pattern_table
     add r0, r1
     ldr r0, [r0]
-    mov r1, $1
-    mov r2, $0
-    bl m3_puts
+    bl m3_log_impl
     bl panic
     b .Lcopy_ewram_to_save_data_done
 
@@ -727,7 +738,6 @@ thumb_master_isr:
     bx r0
 
 .Lthumb_master_isr_unknown_interrupt:
-    bl m3_clear_screen
     ldr r0, =$bad_interrupt_msg
     mov r1, $0
     mov r2, $0
@@ -817,20 +827,6 @@ halt:
 .endfunc
 
 
-.func print_all_done
-print_all_done:
-    push {lr}
-
-    bl m3_clear_screen
-    ldr r0, =$all_done_msg
-    mov r1, $0
-    mov r2, $0
-    bl m3_puts
-
-    pop {pc}
-.endfunc
-
-
 .func ram_memcpy16
 ram_memcpy16:
     @ r0 = src
@@ -844,8 +840,8 @@ ram_memcpy16:
     cmp r3, r2
     beq .Lram_memcpy16_loop_end
 
-    ldr r4, [r0, r3]
-    str r4, [r1, r3]
+    ldrh r4, [r0, r3]
+    strh r4, [r1, r3]
 
     add r3, $2
 
@@ -900,7 +896,7 @@ m3_putc:
 
     rscreen_pixel_addr .req r1
     @ Calculate number of pixel rows
-    mov rscratch, $M3_GLIPHS_PER_COL
+    mov rscratch, $GLIPH_BITHEIGHT
     mul rscreen_pixel_addr, rtarget_gliph_row, rscratch
     @ Multiply by bytes per row
     ldr rscratch, =$M3_BYTES_PER_ROW
@@ -960,6 +956,13 @@ m3_putc:
     .unreq rtmp1
     rpixel_to_write_value .req r4
     ldr rpixel_to_write_value, =$0x7fff
+    b .Lm3_putc_draw_pixel
+
+.Lm3_putc_no_pixel_draw:
+    mov rpixel_to_write_value, $0
+    b .Lm3_putc_draw_pixel
+
+.Lm3_putc_draw_pixel:
 
     @ Calculate target pixel byte address offset
     rpixel_vram_addr .req r6
@@ -981,7 +984,6 @@ m3_putc:
     .unreq rpixel_vram_addr
     .unreq rpixel_to_write_value
 
-.Lm3_putc_no_pixel_draw:
     add rgliph_pixel_bit_col_idx, $1
     b .Lm3_putc_inner_loop_begin
 .Lm3_putc_inner_loop_end:
@@ -1045,6 +1047,87 @@ m3_puts:
 
     pop {r4, pc}
 
+.endfunc
+
+
+.set M3_BYTES_PER_GLIPH_ROW, (M3_GLIPHS_PER_ROW * GLIPH_BITWIDTH * GLIPH_BITWIDTH * M3_BYTES_PER_PIXEL)
+.func m3_log_impl
+m3_log_impl:
+    .pushsection .data.ram
+    rows_displayed: .byte 0x0
+    .popsection
+    push {r4-r5, lr}
+    mov r4, r0
+    
+    @ r0 := rows required
+    bl rows_required_for_string
+    mov r5, r0
+
+    @ Call ram_memcpy16
+    @ r0 := source addr
+    @ r1 := dest addr
+    @ r2 := len
+    ldr r0, =$M3_VIDEO_PAGE
+    ldr r1, =$M3_BYTES_PER_GLIPH_ROW
+    mul r1, r5
+    add r0, r1
+    ldr r1, =$M3_VIDEO_PAGE
+    ldr r2, =$0x12C00
+    add r2, r1
+    sub r2, r0
+
+    bl ram_memcpy16
+
+.Lm3_log_impl_shift_done:
+    mov r0, r4
+    mov r1, $M3_GLIPHS_PER_COL
+    sub r1, r5
+    mov r2, $0
+    bl m3_puts
+
+    pop {r4-r5, pc}
+.endfunc
+
+
+.func rows_required_for_string
+rows_required_for_string:
+    push {lr}
+
+    @ r0 := len
+    bl strlen
+
+    mov r1, $M3_GLIPHS_PER_ROW
+    swi 0x06 @ DIV
+    @ r0 := div
+    @ r1 := mod
+
+    cmp r1, $0
+    beq .Lrows_required_for_string_remainder_accounted_for
+    add r0, $1
+
+.Lrows_required_for_string_remainder_accounted_for:
+    pop {pc}
+.endfunc
+
+
+.func strlen
+strlen:
+    @ Clobbers r1, r2
+    push {lr}
+    mov r1, $0
+
+.Lstrlen_loop_begin:
+    ldrb r2, [r0, r1]
+    cmp r2, $0
+    beq .Lstrlen_loop_end
+
+    add r1, $1
+    b .Lstrlen_loop_begin
+
+.Lstrlen_loop_end:
+    mov r0, r1
+
+    pop {pc}
 .endfunc
 
 
