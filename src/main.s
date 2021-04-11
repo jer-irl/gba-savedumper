@@ -37,7 +37,7 @@
 .popsection
     push {r0-r3}
     ldr r0, =$.Lstring_\@
-    bl m3_log_impl
+    bl m3_log
     pop {r0-r3}
 .endm
 
@@ -194,7 +194,7 @@ main:
 
     @ Setup screen, interrupts
     bl setup_screen
-    bl m3_clear_screen
+    bl m3_clr
 
     bl setup_isr
     bl enable_irq
@@ -435,7 +435,7 @@ copy_save_data_to_ewram:
     ldr r0, =$cart_save_type_pattern_table
     add r0, r1
     ldr r0, [r0]
-    bl m3_log_impl
+    bl m3_log
     bl panic
     b .Lcopy_save_data_to_ewram_done
 
@@ -457,7 +457,7 @@ print_copying_save_to_wram:
     ldr r0, =$cart_save_type_pattern_table
     add r0, r1
     ldr r0, [r0]
-    bl m3_log_impl
+    bl m3_log
 
     pop {pc}
 .endfunc
@@ -485,7 +485,7 @@ detect_save_type:
     add r0, r6
     ldr r0, [r0]
     push {r0-r3}
-    bl m3_log_impl
+    bl m3_log
     pop {r0-r3}
 
     ldr r1, =$ROM_REGION_BEGIN_ADDR
@@ -506,7 +506,7 @@ detect_save_type:
     str ri, [r0]
     m3_log "Detected save type"
     mov r0, r7
-    bl m3_log_impl
+    bl m3_log
 
     b .Ldetect_save_type_done
 
@@ -660,7 +660,7 @@ copy_ewram_to_save_data:
     ldr r0, =$cart_save_type_pattern_table
     add r0, r1
     ldr r0, [r0]
-    bl m3_log_impl
+    bl m3_log
     bl panic
     b .Lcopy_ewram_to_save_data_done
 
@@ -838,31 +838,6 @@ halt:
 .endfunc
 
 
-.func ram_memcpy16
-ram_memcpy16:
-    @ r0 = src
-    @ r1 = dst
-    @ r2 = bytelen
-    @ r3 = i
-    @ r4 = scratch
-    push {r4}
-    mov r3, $0
-.Lram_memcpy16_loop_begin:
-    cmp r3, r2
-    beq .Lram_memcpy16_loop_end
-
-    ldrh r4, [r0, r3]
-    strh r4, [r1, r3]
-
-    add r3, $2
-
-    b .Lram_memcpy16_loop_begin
-.Lram_memcpy16_loop_end:
-    pop {r4}
-    bx lr
-.endfunc
-
-
 .func ram_memcpy8
 ram_memcpy8:
     @ r0 = src
@@ -884,317 +859,6 @@ ram_memcpy8:
     b .Lram_memcpy8_loop_begin
 .Lram_memcpy8_loop_end:
     pop {r4}
-    bx lr
-.endfunc
-
-
-.set M3_WIDTH, 240
-.set M3_HEIGHT, 160
-.set M3_BYTES_PER_PIXEL, 2
-.set M3_GLIPHS_PER_ROW, M3_WIDTH / GLIPH_BITWIDTH
-.set M3_GLIPHS_PER_COL, M3_HEIGHT / GLIPH_BITHEIGHT
-.set M3_BYTES_PER_ROW, M3_WIDTH * M3_BYTES_PER_PIXEL
-.func m3_putc
-m3_putc:
-    rtarget_gliph_ascii_idx .req r0
-    rtarget_gliph_row .req r1
-    rtarget_gliph_col .req r2
-
-    @ r7 = constants for muls
-    push {r4-r7, lr}
-
-    rscratch .req r7
-
-    rscreen_pixel_addr .req r1
-    @ Calculate number of pixel rows
-    mov rscratch, $GLIPH_BITHEIGHT
-    mul rscreen_pixel_addr, rtarget_gliph_row, rscratch
-    @ Multiply by bytes per row
-    ldr rscratch, =$M3_BYTES_PER_ROW
-    mul rscreen_pixel_addr, rscratch
-    @ Calculate number of pixel cols
-    mov rscratch, $GLIPH_BITWIDTH
-    mul rtarget_gliph_col, rscratch
-    @ Add column byte offset
-    mov rscratch, $M3_BYTES_PER_PIXEL
-    mul rtarget_gliph_col, rscratch
-    add rscreen_pixel_addr, rtarget_gliph_col
-    @ Add to VRAM
-    ldr rscratch, =$M3_VIDEO_PAGE
-    add rscreen_pixel_addr, rscratch
-
-    .unreq rtarget_gliph_col
-    .unreq rtarget_gliph_row
-    
-    @ r0 := gliph location
-    @ r0 is currently the ascii char idx
-    rgliph_addr .req r0
-    sub rgliph_addr, $ASCII_FIRST_GLIPH_IDX
-    mov rscratch, $BYTES_PER_GLIPH
-    mul rgliph_addr, rscratch
-    ldr rscratch, =sys8Glyphs
-    add rgliph_addr, rscratch
-
-    @ for each row in gliph
-    rgliph_pixel_bit_row_idx .req r2
-    rgliph_bitrow_byte_value .req r5
-    mov rgliph_pixel_bit_row_idx, $0
-.Lm3_putc_outer_loop_begin:
-    cmp rgliph_pixel_bit_row_idx, $GLIPH_BITHEIGHT
-    beq .Lm3_putc_outer_loop_end
-
-    @ load gliph row byte
-    ldrb rgliph_bitrow_byte_value, [rgliph_addr, rgliph_pixel_bit_row_idx]
-
-    @ r4 is the bit value to write
-    @ r6 is pixel bit scratch, later VRAM target location
-    rgliph_pixel_bit_col_idx .req r3
-    mov rgliph_pixel_bit_col_idx, $0
-.Lm3_putc_inner_loop_begin:
-    cmp rgliph_pixel_bit_col_idx, $GLIPH_BITWIDTH
-    beq .Lm3_putc_inner_loop_end
-
-    @ Calculate pixel value
-    rtmp0 .req r6
-    rtmp1 .req r4
-    mov rtmp0, rgliph_bitrow_byte_value
-    lsr rtmp0, rgliph_pixel_bit_col_idx
-    mov rtmp1, $1
-    and rtmp1, rtmp0
-    cmp rtmp1, $0
-    beq .Lm3_putc_no_pixel_draw
-    .unreq rtmp0
-    .unreq rtmp1
-    rpixel_to_write_value .req r4
-    ldr rpixel_to_write_value, =$0x7fff
-    b .Lm3_putc_draw_pixel
-
-.Lm3_putc_no_pixel_draw:
-    mov rpixel_to_write_value, $0
-    b .Lm3_putc_draw_pixel
-
-.Lm3_putc_draw_pixel:
-
-    @ Calculate target pixel byte address offset
-    rpixel_vram_addr .req r6
-    push {r0}
-    rbytes_per_pixel .req r0
-    mov rpixel_vram_addr, rscreen_pixel_addr
-    ldr rscratch, =$M3_BYTES_PER_ROW
-    mov rbytes_per_pixel, $M3_BYTES_PER_PIXEL
-    mul rscratch, rgliph_pixel_bit_row_idx
-    add rpixel_vram_addr, rscratch
-    mov rscratch, rgliph_pixel_bit_col_idx
-    mul rscratch, rbytes_per_pixel
-    add rpixel_vram_addr, rscratch
-    .unreq rbytes_per_pixel
-    pop {r0}
-
-    @ Write pixel
-    strh rpixel_to_write_value, [rpixel_vram_addr]
-    .unreq rpixel_vram_addr
-    .unreq rpixel_to_write_value
-
-    add rgliph_pixel_bit_col_idx, $1
-    b .Lm3_putc_inner_loop_begin
-.Lm3_putc_inner_loop_end:
-
-.unreq rgliph_pixel_bit_col_idx
-
-    add rgliph_pixel_bit_row_idx, $1
-    b .Lm3_putc_outer_loop_begin
-.Lm3_putc_outer_loop_end:
-
-.unreq rgliph_pixel_bit_row_idx
-.unreq rgliph_bitrow_byte_value
-
-    pop {r4-r7, pc}
-
-.unreq rscratch
-.unreq rtarget_gliph_ascii_idx
-.unreq rgliph_addr
-
-.endfunc
-
-
-.func m3_puts
-m3_puts:
-    rstring_addr .req r0
-    rtarget_gliph_row .req r1
-    rtarget_gliph_col .req r2
-
-    push {r4, lr}
-
-    ri .req r3
-    rchar .req r4
-
-    mov ri, $0
-.Lm3_puts_loop_begin:
-    ldrb rchar, [rstring_addr, ri]
-    cmp rchar, $0
-    beq .Lm3_puts_loop_end
-
-    push {r0-r3}
-    mov r0, rchar
-    mov r1, rtarget_gliph_row
-    mov r2, rtarget_gliph_col
-    add r2, ri
-    mov r3, $30
-    cmp r2, r3
-    blt .Lm3_puts_putc
-    add r1, $1
-    sub r2, $30
-
-.Lm3_puts_putc:
-    bl m3_putc
-    pop {r0-r3}
-
-    add ri, $1
-    b .Lm3_puts_loop_begin
-.Lm3_puts_loop_end:
-
-@ Need to erase rest of line
-.Lm3_puts_loop2_begin:
-    cmp ri, $M3_GLIPHS_PER_ROW
-    bge .Lm3_puts_loop2_end
-
-    push {r0-r3}
-    mov r0, $' '
-    mov r1, rtarget_gliph_row
-    mov r2, rtarget_gliph_col
-    add r2, ri
-    mov r3, $30
-    cmp r2, r3
-    blt .Lm3_puts_putc2
-    add r1, $1
-    sub r2, $30
-
-.Lm3_puts_putc2:
-    bl m3_putc
-    pop {r0-r3}
-
-    add ri, $1
-    b .Lm3_puts_loop2_begin
-
-.Lm3_puts_loop2_end:
-
-    .unreq ri
-    .unreq rchar
-
-    pop {r4, pc}
-
-.endfunc
-
-
-.set M3_BYTES_PER_GLIPH_ROW, (M3_GLIPHS_PER_ROW * GLIPH_BITWIDTH * GLIPH_BITWIDTH * M3_BYTES_PER_PIXEL)
-.func m3_log_impl
-m3_log_impl:
-    .pushsection .data.ram
-    rows_displayed: .byte 0x0
-    .popsection
-    push {r4-r5, lr}
-    mov r4, r0
-    
-    @ r0 := rows required
-    bl rows_required_for_string
-    mov r5, r0
-
-    @ Call ram_memcpy16
-    @ r0 := source addr
-    @ r1 := dest addr
-    @ r2 := len
-    ldr r0, =$M3_VIDEO_PAGE
-    ldr r1, =$M3_BYTES_PER_GLIPH_ROW
-    mul r1, r5
-    add r0, r1
-    ldr r1, =$M3_VIDEO_PAGE
-    ldr r2, =$0x12C00
-    add r2, r1
-    sub r2, r0
-
-    bl ram_memcpy16
-
-.Lm3_log_impl_shift_done:
-    mov r0, r4
-    mov r1, $M3_GLIPHS_PER_COL
-    sub r1, r5
-    mov r2, $0
-    bl m3_puts
-
-    pop {r4-r5, pc}
-.endfunc
-
-
-.func rows_required_for_string
-rows_required_for_string:
-    push {lr}
-
-    @ r0 := len
-    bl strlen
-
-    mov r1, $M3_GLIPHS_PER_ROW
-    swi 0x06 @ DIV
-    @ r0 := div
-    @ r1 := mod
-
-    cmp r1, $0
-    beq .Lrows_required_for_string_remainder_accounted_for
-    add r0, $1
-
-.Lrows_required_for_string_remainder_accounted_for:
-    pop {pc}
-.endfunc
-
-
-.func strlen
-strlen:
-    @ Clobbers r1, r2
-    push {lr}
-    mov r1, $0
-
-.Lstrlen_loop_begin:
-    ldrb r2, [r0, r1]
-    cmp r2, $0
-    beq .Lstrlen_loop_end
-
-    add r1, $1
-    b .Lstrlen_loop_begin
-
-.Lstrlen_loop_end:
-    mov r0, r1
-
-    pop {pc}
-.endfunc
-
-
-.set M3_PIXELS, M3_HEIGHT * M3_WIDTH
-.func m3_clear_screen
-m3_clear_screen:
-    ri .req r0
-    rtotal_num_bytes .req r1
-    rvalue_to_write .req r2
-    rvram_addr .req r3
-
-    mov ri, $0
-    ldr rtotal_num_bytes, =$M3_PIXELS
-    lsl rtotal_num_bytes, $1
-    mov rvalue_to_write, $0
-    ldr rvram_addr, =$M3_VIDEO_PAGE
-
-.Lm3_clear_screen_loop_begin:
-    cmp ri, rtotal_num_bytes
-    beq .Lm3_clear_screen_loop_end
-    
-    strh rvalue_to_write, [rvram_addr, ri]
-
-    add ri, $2
-    b .Lm3_clear_screen_loop_begin
-.Lm3_clear_screen_loop_end:
-
-    .unreq ri
-    .unreq rtotal_num_bytes
-    .unreq rvalue_to_write
-
     bx lr
 .endfunc
 
@@ -1265,6 +929,8 @@ g_is_in_mgba:
 .set GLIPH_BYTEWIDTH, 1
 .set GLIPH_BITHEIGHT, 8
 .set ASCII_FIRST_GLIPH_IDX, 32
+.global ASCII_GLYPHS
+ASCII_GLYPHS:
 sys8Glyphs:
 	.word 0x00000000,0x00000000,0x18181818,0x00180018,0x00003636,0x00000000,0x367F3636,0x0036367F
 	.word 0x3C067C18,0x00183E60,0x1B356600,0x0033566C,0x6E16361C,0x00DE733B,0x000C1818,0x00000000

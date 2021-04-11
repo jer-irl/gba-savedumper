@@ -1,0 +1,10 @@
+-Wall
+-Wextra
+-Werror
+-mthumb
+-march=armv4
+-mcpu=arm7tdmi
+-mtune=arm7tdmi
+-ffast-math
+-fomit-frame-pointer
+-Isrc

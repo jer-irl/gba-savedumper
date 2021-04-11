@@ -18,6 +18,11 @@ LDFLAGS = -g -Map=$(BUILD)/asteroids.map
 AS_OBJECTS = \
 	$(BUILD)/main.o
 
+CC_OBJECTS = \
+	$(BUILD)/logging.o \
+	$(BUILD)/bios.o \
+	$(BUILD)/common.o
+
 LDSCRIPT = src/main.ld
 
 
@@ -29,11 +34,14 @@ mkbuilddir:
 $(BUILD)/$(TARGET): $(BUILD)/$(TARGET).elf
 	$(OBJCOPY) -O binary $< $@
 
-$(BUILD)/$(TARGET).elf: $(LDSCRIPT) $(AS_OBJECTS)
+$(BUILD)/$(TARGET).elf: $(LDSCRIPT) $(AS_OBJECTS) $(CC_OBJECTS)
 	$(LD) -o $@ $(LDFLAGS) -T$^
 
 $(AS_OBJECTS): $(BUILD)/%.o: src/%.s
 	$(AS) -o $@ $(ASFLAGS) $<
+
+$(CC_OBJECTS): $(BUILD)/%.o: src/%.c
+	$(CC) -o $@ $(CFLAGS) $<
 
 dockerbuild:
 	docker build --tag asteroids-gba/build --file docker/Dockerfile.build docker
