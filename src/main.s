@@ -64,9 +64,10 @@ header:
     .zero 12
 
     @ AGB-UTTD game code; 4 bytes
-    .byte 'B'               @ Game type: Normal "newer" game
-    .byte 0x00,0x00         @ Short title
-    .byte 'E'               @ Language: English
+    .ascii "AMTE"
+    @ .byte 'B'               @ Game type: Normal "newer" game
+    @ .byte 0x00,0x00         @ Short title
+    @ .byte 'E'               @ Language: English
 
     .byte 0x30,0x31         @ Maker code; 0x30,0x31 for Nintendo
     .byte 0x96              @ Fixed
@@ -74,7 +75,7 @@ header:
     .byte 0x00              @ Device type; 0 for normal catridges
     .zero 7                 @ Reserved
     .byte 0x00              @ Game version
-    .byte 0x69              @ Header checksum
+    .byte 0xC9              @ Header checksum
     .zero 2                 @ Reserved
 end_header:
 
@@ -338,8 +339,15 @@ on_flash_cart_reinserted:
 
     @ If real hardware, need to jump to flash card and hope we end up back here
     ldr r2, =$g_is_in_mgba
+    ldr r2, [r2]
     cmp r2, $0
     bne .Lon_flash_cart_reinserted_in_mgba
+    ldr r2, =$_magic_location
+    ldr r2, [r2]
+    ldr r1, =$MAGIC
+    cmp r2, r1
+    beq .Lon_flash_cart_reinserted_with_magic
+
     @ cross fingers and jump to ARM ROM
     m3_log "Need to jump to flash cart"
     m3_log "Reopen this custom rom"
@@ -356,6 +364,7 @@ on_flash_cart_reinserted:
     bx r0
 
 .Lon_flash_cart_reinserted_in_mgba:
+.Lon_flash_cart_reinserted_with_magic:
     @ Copy save data from EWRAM to new cart sram
     push {r0}
     bl copy_ewram_to_save_data
@@ -1284,38 +1293,6 @@ sys8Glyphs:
 	.word 0x36630000,0x0063361C,0x66660000,0x0C183C66,0x307E0000,0x007E0C18,0x0C181830,0x00301818
 	.word 0x18181818,0x00181818,0x3018180C,0x000C1818,0x003B6E00,0x00000000,0x00000000,0x00000000
 
-
-.align 2
-bad_interrupt_msg:
-    .asciz "unknown interrupt received"
-
-.align 2
-panic_msg:
-    .asciz "unrecoverable panic"
-
-.align 2
-remove_cart_message:
-    .asciz "please remove cartridge"
-
-.align 2
-unknown_cartswap_state_msg:
-    .asciz "Unknown cartswap state"
-
-.align 2
-insert_oem_cart_msg:
-    .asciz "Insert original cart now"
-
-.align 2
-remove_oem_cart_msg:
-    .asciz "Remove oem cart now"
-
-.align 2
-insert_flash_cart_msg:
-    .asciz "Insert flash cart now"
-
-.align 2
-all_done_msg:
-    .asciz "All done, power off"
 
 .align 2
 cart_save_type_pattern_UNKNOWN:
