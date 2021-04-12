@@ -21,6 +21,9 @@ AS_OBJECTS = \
 CC_OBJECTS = \
 	$(BUILD)/logging.o \
 	$(BUILD)/bios.o \
+	$(BUILD)/memory.o \
+	$(BUILD)/data.o \
+	$(BUILD)/interrupt.o \
 	$(BUILD)/common.o
 
 LDSCRIPT = src/main.ld

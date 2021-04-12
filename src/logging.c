@@ -1,6 +1,9 @@
-#include "common.h"
-#include "bios.h"
 #include "logging.h"
+
+#include "bios.h"
+#include "common.h"
+#include "data.h"
+#include "memory.h"
 
 static const uint32_t M3_WIDTH = 240;
 static const uint32_t M3_HEIGHT = 160;
@@ -17,8 +20,6 @@ static const uint32_t M3_PAGE_LEN = 0x12c00;
 
 static EWRAM_CODE THUMB void m3_putc(char c, uint8_t glyph_row_idx, uint8_t glyph_col_idx);
 static EWRAM_CODE THUMB uint32_t strlen_naive(const char *s);
-
-extern char ASCII_GLYPHS[];
 
 void m3_clr() {
     for (uint16_t i = 0; i < M3_PIXELS; ++i) {
@@ -66,7 +67,7 @@ uint32_t strlen_naive(const char * const s) {
 
 void m3_putc(const char c, const uint8_t row_idx, const uint8_t col_idx) {
     uint16_t * const starting_pixel_addr = (uint16_t *) (M3_PAGE_ADDR + (row_idx * M3_WIDTH * GLYPH_HEIGHT_PIXELS) + (col_idx * GLYPH_WIDTH_PIXELS));
-    const uint8_t * const glyph_addr = (uint8_t *) ASCII_GLYPHS + ((c - 32) * GLYPH_HEIGHT_PIXELS);
+    const uint8_t * const glyph_addr = (const uint8_t *) ASCII_GLYPHS + ((c - 32) * GLYPH_HEIGHT_PIXELS);
     for (uint32_t pixel_row = 0; pixel_row < GLYPH_HEIGHT_PIXELS; ++pixel_row) {
         for (uint32_t pixel_col = 0; pixel_col < GLYPH_WIDTH_PIXELS; ++pixel_col) {
             const uint8_t glyph_pixel_row_byte = *(glyph_addr + pixel_row);

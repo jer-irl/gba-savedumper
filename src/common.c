@@ -1,7 +1,19 @@
 #include "common.h"
+#include "logging.h"
 
-void memcpy16_naive(uint16_t * dst, const uint16_t * src, const uint32_t len) {
-    for (uint32_t i = 0; i < len / 2; ++i) {
-        dst[i] = src[i];
-    }
+// From linker
+extern uint32_t * const _magic_location;
+
+bool magic_present() {
+    return *_magic_location == 0xdeadbeef;
+}
+
+void set_magic() {
+    *_magic_location = 0xdeadbeef;
+}
+
+void panic() {
+    EWRAM_RODATA static char *PANIC_MSG = "Unrecoverable error";
+    m3_log(PANIC_MSG);
+    while (true) {}
 }

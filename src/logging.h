@@ -1,8 +1,6 @@
 #ifndef GBA_LOGGING_H
 #define GBA_LOGGING_H
 
-#include <stdint.h>
-
 #include "common.h"
 
 EWRAM_CODE THUMB void m3_clr();

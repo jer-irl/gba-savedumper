@@ -12,24 +12,6 @@
 .set MGBA_LOG_ERROR, 1
 
 
-.extern _magic_location
-.set MAGIC, 0xDEADBEEF
-
-
-.macro m3_print row s:vararg
-.pushsection .rodata.ram
-.Lstring_\@:
-    .asciz \s
-.popsection
-    push {r0-r3}
-    ldr r0, =$.Lstring_\@
-    mov r1, $\row
-    mov r2, $0
-    bl m3_puts
-    pop {r0-r3}
-.endm
-
-
 .macro m3_log s:vararg
 .pushsection .rodata.ram
 .Lstring_\@:
@@ -172,7 +154,7 @@ rom_memcpy16:
 .section .text.ram.0
 .thumb
 
-
+.extern bios_halt
 .func main
 main:
     @ Detect mgba
@@ -199,10 +181,9 @@ main:
     bl setup_isr
     bl enable_irq
 
-    ldr r0, =$_magic_location
-    ldr r2, [r0]
-    ldr r1, =$MAGIC
-    cmp r2, r1
+    .extern magic_present
+    bl magic_present
+    cmp r0, $1
     beq .Lmain_magic_present
     b .Lmain_magic_absent
 
@@ -216,14 +197,14 @@ main:
     cmp r0, $CARTSWAP_STAGE_FLASHCART_LOADED
     bne .Lmain_goto_panic
     m3_log "Please remove cartridge"
-    bl halt
+    bl bios_halt
 
 .Lmain_magic_present:
     ldr r0, =$g_cart_swap_stage
     mov r1, $CARTSWAP_STAGE_FLASHCART_REINSERTED
     str r1, [r0]
     bl on_flash_cart_reinserted
-    bl halt
+    bl bios_halt
 
 .Lmain_goto_panic:
     bl panic
@@ -342,10 +323,8 @@ on_flash_cart_reinserted:
     ldr r2, [r2]
     cmp r2, $0
     bne .Lon_flash_cart_reinserted_in_mgba
-    ldr r2, =$_magic_location
-    ldr r2, [r2]
-    ldr r1, =$MAGIC
-    cmp r2, r1
+    bl magic_present
+    cmp r0, $1
     beq .Lon_flash_cart_reinserted_with_magic
 
     @ cross fingers and jump to ARM ROM
@@ -828,16 +807,6 @@ handle_gamepak_interrupt:
 .endfunc
 
 
-.set SWI_HALT_THUMB, 0x02
-.func halt
-halt:
-    @ TODO real swi
-    @swi $SWI_HALT_THUMB
-    b halt
-    bl panic
-.endfunc
-
-
 .func ram_memcpy8
 ram_memcpy8:
     @ r0 = src
@@ -863,18 +832,7 @@ ram_memcpy8:
 .endfunc
 
 
-.func panic
-panic:
-    push {lr}
-
-    m3_log "Unrecoverable error, panic!"
-
-    @ TODO
-.Lpanic_infinite_loop:
-    b .Lpanic_infinite_loop
-
-    pop {pc}
-.endfunc
+.extern panic
 
 
 .arm
@@ -929,35 +887,6 @@ g_is_in_mgba:
 .set GLIPH_BYTEWIDTH, 1
 .set GLIPH_BITHEIGHT, 8
 .set ASCII_FIRST_GLIPH_IDX, 32
-.global ASCII_GLYPHS
-ASCII_GLYPHS:
-sys8Glyphs:
-	.word 0x00000000,0x00000000,0x18181818,0x00180018,0x00003636,0x00000000,0x367F3636,0x0036367F
-	.word 0x3C067C18,0x00183E60,0x1B356600,0x0033566C,0x6E16361C,0x00DE733B,0x000C1818,0x00000000
-	.word 0x0C0C1830,0x0030180C,0x3030180C,0x000C1830,0xFF3C6600,0x0000663C,0x7E181800,0x00001818
-	.word 0x00000000,0x0C181800,0x7E000000,0x00000000,0x00000000,0x00181800,0x183060C0,0x0003060C
-	.word 0x7E76663C,0x003C666E,0x181E1C18,0x00181818,0x3060663C,0x007E0C18,0x3860663C,0x003C6660
-	.word 0x33363C38,0x0030307F,0x603E067E,0x003C6660,0x3E060C38,0x003C6666,0x3060607E,0x00181818
-	.word 0x3C66663C,0x003C6666,0x7C66663C,0x001C3060,0x00181800,0x00181800,0x00181800,0x0C181800
-	.word 0x06186000,0x00006018,0x007E0000,0x0000007E,0x60180600,0x00000618,0x3060663C,0x00180018
-
-	.word 0x5A5A663C,0x003C067A,0x7E66663C,0x00666666,0x3E66663E,0x003E6666,0x06060C78,0x00780C06
-	.word 0x6666361E,0x001E3666,0x1E06067E,0x007E0606,0x1E06067E,0x00060606,0x7606663C,0x007C6666
-	.word 0x7E666666,0x00666666,0x1818183C,0x003C1818,0x60606060,0x003C6660,0x0F1B3363,0x0063331B
-	.word 0x06060606,0x007E0606,0x6B7F7763,0x00636363,0x7B6F6763,0x00636373,0x6666663C,0x003C6666
-	.word 0x3E66663E,0x00060606,0x3333331E,0x007E3B33,0x3E66663E,0x00666636,0x3C0E663C,0x003C6670
-	.word 0x1818187E,0x00181818,0x66666666,0x003C6666,0x66666666,0x00183C3C,0x6B636363,0x0063777F
-	.word 0x183C66C3,0x00C3663C,0x183C66C3,0x00181818,0x0C18307F,0x007F0306,0x0C0C0C3C,0x003C0C0C
-	.word 0x180C0603,0x00C06030,0x3030303C,0x003C3030,0x00663C18,0x00000000,0x00000000,0x003F0000
-
-	.word 0x00301818,0x00000000,0x603C0000,0x007C667C,0x663E0606,0x003E6666,0x063C0000,0x003C0606
-	.word 0x667C6060,0x007C6666,0x663C0000,0x003C067E,0x0C3E0C38,0x000C0C0C,0x667C0000,0x3C607C66
-	.word 0x663E0606,0x00666666,0x18180018,0x00301818,0x30300030,0x1E303030,0x36660606,0x0066361E
-	.word 0x18181818,0x00301818,0x7F370000,0x0063636B,0x663E0000,0x00666666,0x663C0000,0x003C6666
-	.word 0x663E0000,0x06063E66,0x667C0000,0x60607C66,0x663E0000,0x00060606,0x063C0000,0x003E603C
-	.word 0x0C3E0C0C,0x00380C0C,0x66660000,0x007C6666,0x66660000,0x00183C66,0x63630000,0x00367F6B
-	.word 0x36630000,0x0063361C,0x66660000,0x0C183C66,0x307E0000,0x007E0C18,0x0C181830,0x00301818
-	.word 0x18181818,0x00181818,0x3018180C,0x000C1818,0x003B6E00,0x00000000,0x00000000,0x00000000
 
 
 .align 2
@@ -982,6 +911,3 @@ cart_save_type_pattern_table:
     .word cart_save_type_pattern_FLASH
     .word cart_save_type_pattern_FLASH512
     .word cart_save_type_pattern_FLASH1M
-
-unimplelemented_msg:
-    .asciz "Unimplemented"
