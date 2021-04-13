@@ -1,4 +1,6 @@
 #include "common.h"
+
+#include "bios.h"
 #include "logging.h"
 
 // From linker
@@ -12,7 +14,9 @@ void set_magic() {
     *_magic_location = 0xdeadbeef;
 }
 
-void panic() {
+__attribute__((noreturn)) void panic() {
     m3_log_inline("Unrecoverable error");
-    while (true) {}
+    while (true) {
+        bios_halt();
+    }
 }
