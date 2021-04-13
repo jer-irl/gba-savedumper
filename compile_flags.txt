@@ -6,3 +6,4 @@
 -ffast-math
 -fomit-frame-pointer
 -Isrc
+-std=gnu11

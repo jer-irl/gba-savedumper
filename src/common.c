@@ -13,7 +13,6 @@ void set_magic() {
 }
 
 void panic() {
-    EWRAM_RODATA static char *PANIC_MSG = "Unrecoverable error";
-    m3_log(PANIC_MSG);
+    m3_log_inline("Unrecoverable error");
     while (true) {}
 }

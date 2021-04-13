@@ -9,6 +9,8 @@ typedef unsigned int uint32_t;
 
 typedef signed int int32_t;
 
+#define NULL ((void *)0x0);
+
 #define EWRAM_RODATA __attribute__((section(".rodata.ram")))
 #define EWRAM_DATA __attribute__((section(".data.ram")))
 
@@ -22,5 +24,7 @@ EWRAM_CODE THUMB bool magic_present();
 EWRAM_CODE THUMB void set_magic();
 
 EWRAM_CODE THUMB void panic();
+
+EWRAM_CODE THUMB uint32_t get_crc(const uint32_t * source, uint32_t length);
 
 #endif // GBA_COMMON_H

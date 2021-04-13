@@ -178,7 +178,7 @@ main:
     bl setup_screen
     bl m3_clr
 
-    bl setup_isr
+    bl init_interrupts
     bl enable_irq
 
     .extern magic_present
@@ -441,6 +441,7 @@ print_copying_save_to_wram:
     pop {pc}
 .endfunc
 
+.extern scan_memory32
 .set ROM_REGION_BEGIN_ADDR, 0x08000000
 .set ROM_REGION_END_ADDR, 0x09FFFFFF
 .func detect_save_type
@@ -472,7 +473,7 @@ detect_save_type:
     mov r3, ralignment
     mov r7, r0
 
-    bl scan_memory
+    bl scan_memory32
 
     cmp r0, $0
     bne .Ldetect_save_type_found
@@ -497,56 +498,6 @@ detect_save_type:
 
 .Ldetect_save_type_done:
     .unreq ralignment
-    .unreq ri
-
-    pop {r4-r7, pc}
-.endfunc
-
-
-@ r0 := 0 if not found, otherwise address of pattern
-.func scan_memory
-scan_memory:
-    push {r4-r7, lr}
-
-    @ Optimizing so not as much pushing and popping to the stack in the loop
-    rpattern_ptr .req r4
-    rsearch_region_begin_ptr .req r5
-    rsearch_region_end_ptr .req r6
-    ralignment_constraint .req r7
-    ri .req r8
-
-    mov rpattern_ptr, r0    
-    mov rsearch_region_begin_ptr, r1
-    mov rsearch_region_end_ptr, r2
-    mov ralignment_constraint, r3
-
-.Lscan_memory_loop_begin:
-    cmp rsearch_region_begin_ptr, rsearch_region_end_ptr
-    bge .Lscan_memory_not_found
-
-    mov r0, rpattern_ptr
-    mov r1, rsearch_region_begin_ptr
-    bl strcmp
-
-    cmp r0, $0
-    beq .Lscan_memory_found
-
-    add rsearch_region_begin_ptr, ralignment_constraint
-    b .Lscan_memory_loop_begin
-
-.Lscan_memory_not_found:
-    mov r0, $0
-    b .Lscan_memory_done
-
-.Lscan_memory_found:
-    mov r0, rsearch_region_begin_ptr
-    b .Lscan_memory_done
-
-.Lscan_memory_done:
-    .unreq rpattern_ptr
-    .unreq rsearch_region_begin_ptr
-    .unreq rsearch_region_end_ptr
-    .unreq ralignment_constraint
     .unreq ri
 
     pop {r4-r7, pc}
@@ -698,44 +649,6 @@ enable_irq:
 .endfunc
 
 
-.func setup_isr
-setup_isr:
-    ldr r0, =$master_isr
-    ldr r1, =$ISR_ADDR
-    str r0, [r1]
-    bx lr
-.endfunc
-
-
-.set KEYPAD_MASK, 0b0001000000000000
-.func thumb_master_isr
-thumb_master_isr:
-    push {lr}
-    ldr r0, =$REG_IF
-    ldrh r0, [r0]
-    ldr r1, =$GAMEPAK_MASK
-    cmp r0, r1
-    beq .Lthumb_master_isr_known_interrupt
-    ldr r1, =$KEYPAD_MASK
-    cmp r0, r1
-    beq .Lthumb_master_isr_known_interrupt
-    b .Lthumb_master_isr_unknown_interrupt
-.Lthumb_master_isr_known_interrupt:
-    push {r1}
-    bl handle_gamepak_interrupt
-    pop {r1}
-    ldr r0, =$REG_IF
-    strh r1, [r0]
-
-    pop {r0}
-    bx r0
-
-.Lthumb_master_isr_unknown_interrupt:
-    m3_log "Bad Interrupt"
-    bl panic
-.endfunc
-
-
 .func handle_gamepak_interrupt
 handle_gamepak_interrupt:
     push {lr}
@@ -835,18 +748,6 @@ ram_memcpy8:
 .extern panic
 
 
-.arm
-.func master_isr
-master_isr:
-    push {lr}
-    ldr r0, =$thumb_master_isr
-    orr r0, $1
-    mov lr, pc
-    bx r0
-    pop {pc}
-.endfunc
-
-
 .section .data.ram
 
 .set CARTSWAP_STAGE_FLASHCART_NOT_YET_LOADED, 0
@@ -876,38 +777,3 @@ g_cart_save_type:
 .align 2
 g_is_in_mgba:
     .word 0x00000000
-
-
-.section .rodata.ram
-
-@ From Tonc
-.set BYTES_PER_GLIPH, 8
-.set BITS_PER_GLIPH, 64
-.set GLIPH_BITWIDTH, 8
-.set GLIPH_BYTEWIDTH, 1
-.set GLIPH_BITHEIGHT, 8
-.set ASCII_FIRST_GLIPH_IDX, 32
-
-
-.align 2
-cart_save_type_pattern_UNKNOWN:
-    .asciz "BAD"
-cart_save_type_pattern_EEPROM:
-    .asciz "EEPROM_"
-cart_save_type_pattern_SRAM:
-    .asciz "SRAM_"
-cart_save_type_pattern_FLASH:
-    .asciz "FLASH_"
-cart_save_type_pattern_FLASH512:
-    .asciz "FLASH512_"
-cart_save_type_pattern_FLASH1M:
-    .asciz "FLASH1M_"
-
-.align 2
-cart_save_type_pattern_table:
-    .word cart_save_type_pattern_UNKNOWN
-    .word cart_save_type_pattern_EEPROM
-    .word cart_save_type_pattern_SRAM
-    .word cart_save_type_pattern_FLASH
-    .word cart_save_type_pattern_FLASH512
-    .word cart_save_type_pattern_FLASH1M

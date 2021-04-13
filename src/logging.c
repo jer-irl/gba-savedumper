@@ -5,21 +5,21 @@
 #include "data.h"
 #include "memory.h"
 
-static const uint32_t M3_WIDTH = 240;
-static const uint32_t M3_HEIGHT = 160;
-static const uint32_t M3_PIXELS = M3_WIDTH * M3_HEIGHT;
+EWRAM_RODATA static const uint32_t M3_WIDTH = 240;
+EWRAM_RODATA static const uint32_t M3_HEIGHT = 160;
+EWRAM_RODATA static const uint32_t M3_PIXELS = M3_WIDTH * M3_HEIGHT;
 
-static const uint32_t GLYPH_WIDTH_PIXELS = 8;
-static const uint32_t GLYPH_HEIGHT_PIXELS = 8;
+EWRAM_RODATA static const uint32_t GLYPH_WIDTH_PIXELS = 8;
+EWRAM_RODATA static const uint32_t GLYPH_HEIGHT_PIXELS = 8;
 
-static const uint32_t M3_GLYPHS_PER_ROW = M3_WIDTH / 8;
-static const uint32_t M3_GLYPH_ROWS = M3_HEIGHT / 8;
+EWRAM_RODATA static const uint32_t M3_GLYPHS_PER_ROW = M3_WIDTH / 8;
+EWRAM_RODATA static const uint32_t M3_GLYPH_ROWS = M3_HEIGHT / 8;
 
-static uint16_t * const M3_PAGE_ADDR = (uint16_t *) 0x06000000;
-static const uint32_t M3_PAGE_LEN = 0x12c00;
+EWRAM_RODATA static uint16_t * const M3_PAGE_ADDR = (uint16_t *) 0x06000000;
+EWRAM_RODATA static const uint32_t M3_PAGE_LEN = 0x12c00;
 
-static EWRAM_CODE THUMB void m3_putc(char c, uint8_t glyph_row_idx, uint8_t glyph_col_idx);
-static EWRAM_CODE THUMB uint32_t strlen_naive(const char *s);
+EWRAM_CODE THUMB static void m3_putc(char c, uint8_t glyph_row_idx, uint8_t glyph_col_idx);
+EWRAM_CODE THUMB static uint32_t strlen_naive(const char *s);
 
 void m3_clr() {
     for (uint16_t i = 0; i < M3_PIXELS; ++i) {

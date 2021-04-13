@@ -11,7 +11,7 @@ LD = arm-none-eabi-ld
 AS = arm-none-eabi-as
 OBJCOPY = arm-none-eabi-objcopy
 
-CFLAGS = -c -g -O0 -Wall -Wextra -Werror -mthumb -mthumb-interwork -mcpu=$(CPU) -mtune=$(CPU) -ffast-math -fomit-frame-pointer
+CFLAGS = -c -g -O0 -Wall -Wextra -Werror -mthumb -mthumb-interwork -mcpu=$(CPU) -mtune=$(CPU) -ffast-math -fomit-frame-pointer -std=gnu11
 ASFLAGS = -c -mthumb -mthumb-interwork -g
 LDFLAGS = -g -Map=$(BUILD)/asteroids.map
 
@@ -24,6 +24,8 @@ CC_OBJECTS = \
 	$(BUILD)/memory.o \
 	$(BUILD)/data.o \
 	$(BUILD)/interrupt.o \
+	$(BUILD)/savedata.o \
+	$(BUILD)/mgba.o \
 	$(BUILD)/common.o
 
 LDSCRIPT = src/main.ld
