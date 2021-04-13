@@ -8,9 +8,9 @@ EWRAM_CODE THUMB void m3_clr();
 EWRAM_CODE THUMB void m3_puts(const char *s, uint8_t);
 EWRAM_CODE THUMB void m3_log(const char *s);
 
-#define m3_log_inline(s) \
+#define m3_log_inline(message_literal) \
     { \
-        EWRAM_RODATA static const char message[] = s; \
+        EWRAM_RODATA static const char message[] = message_literal; \
         m3_log(message); \
     }
 

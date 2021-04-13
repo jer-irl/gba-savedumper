@@ -50,7 +50,9 @@ SECTIONS {
 
     _ramsave_area_end = ORIGIN(EWRAM) + LENGTH(EWRAM);
     _ramsave_area_begin = _ramsave_area_end - 0x020000;
-    _magic_location = _ramsave_area_begin - 0x04;
+    _ramsave_crc_location = _ramsave_area_begin - 0x04;
+    _ramsave_len_location = _ramsave_area_begin - 0x08;
+    _magic_location = _ramsave_area_begin - 0x10;
 
     .data : { 
         *(.data);

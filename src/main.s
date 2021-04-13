@@ -86,7 +86,7 @@ init:
 
     @ Branch to main(), switching to THUMB state
     ldr r0, =main
-    add r0, $1
+    orr r0, $1
     mov lr, pc
     bx r0
     b init
