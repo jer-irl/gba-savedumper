@@ -3,9 +3,9 @@
 #include "common.h"
 #include "logging.h"
 
-EWRAM_RODATA static uint16_t * const REG_IE = (uint16_t *) 0x04000200;
-EWRAM_RODATA static uint16_t * const REG_IF = (uint16_t *) 0x04000202;
-EWRAM_RODATA static uint16_t * const REG_IME = (uint16_t *) 0x04000208;
+EWRAM_RODATA static volatile uint16_t * const REG_IE = (uint16_t *) 0x04000200;
+EWRAM_RODATA static volatile uint16_t * const REG_IF = (uint16_t *) 0x04000202;
+EWRAM_RODATA static volatile uint16_t * const REG_IME = (uint16_t *) 0x04000208;
 
 typedef void (*interrupt_service_routine)();
 EWRAM_RODATA static interrupt_service_routine * const ISR_ENTRY_PTR = (interrupt_service_routine *) 0x03007ffc;
@@ -20,7 +20,7 @@ EWRAM_RODATA static const uint32_t MAX_NUM_INSTALLED_HANDLERS = 0x10;
 EWRAM_DATA static struct InterruptHandlerEntry INSTALLED_HANDLERS[0x10];
 EWRAM_DATA static uint32_t NUM_INSTALLED_HANDLERS = 0;
 
-__attribute__((interrupt("IRQ"))) EWRAM_CODE ARM static void master_isr();
+/*__attribute__((interrupt("IRQ")))*/ EWRAM_CODE ARM static void master_isr();
 
 void init_interrupts() {
     *ISR_ENTRY_PTR = master_isr;
@@ -42,7 +42,7 @@ void install_interrupt_handler(const enum InterruptFlag mask, const InterruptHan
     const struct InterruptHandlerEntry entry = { .mask = mask, .handler = handler, .should_delete = false };
     INSTALLED_HANDLERS[NUM_INSTALLED_HANDLERS++] = entry;
 
-    uint16_t tmp = *REG_IE;
+    const uint16_t tmp = *REG_IE;
     *REG_IE = tmp | (uint16_t) mask;
 
     *REG_IME = before_ime;
@@ -68,15 +68,15 @@ void master_isr() {
     *REG_IME = 0;
 
     // Go to system mode
-    asm volatile (
-        "mrs r3, cpsr\n"
-        "bic r3, r3, #0xdf\n"
-        "orr r3, r3, #0x1f\n"
-        "msr cpsr, r3\n"
-        :
-        :
-        : "r3"
-    );
+    // asm volatile (
+    //     "mrs r3, cpsr\n"
+    //     "bic r3, r3, #0xdf\n"
+    //     "orr r3, r3, #0x1f\n"
+    //     "msr cpsr, r3\n"
+    //     :
+    //     :
+    //     : "r3"
+    // );
 
     const enum InterruptFlag received_interrupts = *(enum InterruptFlag *) REG_IF;
     for (uint32_t i = 0; i < NUM_INSTALLED_HANDLERS; ++i) {
@@ -96,15 +96,13 @@ void master_isr() {
     }
 
     // Delete marked handlers
-    for (uint32_t i = 0; i < NUM_INSTALLED_HANDLERS; ) {
+    for (uint32_t i = 0; i < NUM_INSTALLED_HANDLERS; ++i) {
         if (INSTALLED_HANDLERS[i].should_delete) {
             if (NUM_INSTALLED_HANDLERS > 1) {
                 INSTALLED_HANDLERS[i] = INSTALLED_HANDLERS[NUM_INSTALLED_HANDLERS - 1];
+                --i;
             }
             --NUM_INSTALLED_HANDLERS;
-        }
-        else {
-            ++i;
         }
     }
 
@@ -118,15 +116,15 @@ void master_isr() {
     *REG_IME = 0;
 
     // IRQ mode
-    asm volatile (
-        "mrs r3, cpsr\n"
-        "bic r3, r3, #0xdf\n"
-        "orr r3, r3, #0x92\n"
-        "msr cpsr, r3\n"
-        :
-        :
-        : "r3"
-    );
+    // asm volatile (
+    //     "mrs r3, cpsr\n"
+    //     "bic r3, r3, #0xdf\n"
+    //     "orr r3, r3, #0x92\n"
+    //     "msr cpsr, r3\n"
+    //     :
+    //     :
+    //     : "r3"
+    // );
 
     // Re-enable interrupts
     *REG_IME = before_ime;

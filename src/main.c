@@ -26,7 +26,7 @@ EWRAM_CODE THUMB static void main_hot_reboot();
 EWRAM_CODE THUMB static void on_flash_cart_reinserted_and_reloaded();
 
 __attribute__((noreturn))
-EWRAM_CODE THUMB int main() {
+EWRAM_CODE THUMB int gba_main() {
     m3_init();
     m3_clr();
     m3_log_inline("Welcome");
@@ -42,16 +42,16 @@ EWRAM_CODE THUMB int main() {
         main_cold_boot();
     }
 
+    bios_halt();
     // Shouldn't get here
     panic();
+    while (true) {}
 }
 
 void main_cold_boot() {
     install_interrupt_handler(IRQ_GAMEPAK, handle_flash_cart_removed);
 
     m3_log_inline("Code loaded to RAM, please remove flash cart");
-
-    bios_halt();
 }
 
 void handle_flash_cart_removed(const enum InterruptFlag interrupt) {

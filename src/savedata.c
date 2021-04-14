@@ -14,24 +14,42 @@ enum SaveType {
     SAV_FLASH1M,
 };
 
+EWRAM_RODATA static volatile const uint8_t * const SRAM_REGION_BEGIN = (const uint8_t *) 0x0e000000;
+
 EWRAM_CODE THUMB static enum SaveType get_savetype();
 EWRAM_CODE THUMB static enum SaveType prompt_cart_savetype();
 EWRAM_CODE THUMB static enum SaveType detect_cart_savetype();
 
 uint32_t rip_save_to_ram(uint32_t * const destination, const uint32_t max_size) {
-    // rip
-    // write crc
+    uint32_t ripped_len = 0;
     switch (get_savetype()) {
         case SAV_UNKNOWN:
+            m3_log_inline("Unknown save type");
+            panic();
+            break;
         case SAV_SRAM:
+            m3_log_inline("Ripping SRAM save");
+            ripped_len = 0x10000;
+            if (ripped_len < max_size) {
+                m3_log_inline("Not enough space to rip save from SRAM");
+                panic();
+            }
+            memcpy8_naive((uint8_t *) destination, SRAM_REGION_BEGIN, ripped_len);
+            break;
         case SAV_EEPROM:
         case SAV_FLASH:
         case SAV_FLASH512:
         case SAV_FLASH1M:
             m3_log_inline("Unimplemented");
             panic();
+            break;
     }
-    return 0;
+    m3_log_inline("Done ripping save");
+    return ripped_len;
+}
+
+void dump_ram_to_sram(const uint32_t * const source, const uint32_t size) {
+    memcpy8_naive((uint8_t *) SRAM_REGION_BEGIN, (const uint8_t *) source, size);
 }
 
 enum SaveType get_savetype() {
@@ -85,18 +103,24 @@ enum SaveType detect_cart_savetype() {
     EWRAM_RODATA static const uint32_t * const ROM_REGION_BEGIN_ADDR = (const uint32_t *) 0x08000000;
     EWRAM_RODATA static const uint32_t * const ROM_REGION_END_ADDR = (const uint32_t *) 0x09ffffff;
 
+    m3_log_inline("Scanning ROM for save type");
+    m3_log((char *) SRAM_PATTERN);
     if (scan_memory32(SRAM_PATTERN, ROM_REGION_BEGIN_ADDR, ROM_REGION_END_ADDR)) {
         return SAV_SRAM;
     }
+    m3_log((char *) EEPROM_PATTERN);
     if (scan_memory32(EEPROM_PATTERN, ROM_REGION_BEGIN_ADDR, ROM_REGION_END_ADDR)) {
         return SAV_EEPROM;
     }
+    m3_log((char *) FLASH_PATTERN);
     if (scan_memory32(FLASH_PATTERN, ROM_REGION_BEGIN_ADDR, ROM_REGION_END_ADDR)) {
         return SAV_FLASH;
     }
+    m3_log((char *) FLASH512_PATTERN);
     if (scan_memory32(FLASH512_PATTERN, ROM_REGION_BEGIN_ADDR, ROM_REGION_END_ADDR)) {
         return SAV_FLASH512;
     }
+    m3_log((char *) FLASH1M_PATTERN);
     if (scan_memory32(FLASH1M_PATTERN, ROM_REGION_BEGIN_ADDR, ROM_REGION_END_ADDR)) {
         return SAV_FLASH512;
     }

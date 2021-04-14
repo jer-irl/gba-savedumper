@@ -12,7 +12,7 @@ MEMORY {
 
 SECTIONS {
     .text : {
-        *(.text .text.rom)
+        *(.text.rom)
         . = ALIGN(4);
     } >ROM
 
@@ -22,7 +22,7 @@ SECTIONS {
     } >ROM
 
     .text.ram : {
-        *(.text.ram*)
+        *(.text .text.ram*)
         . = ALIGN(4);
     } >EWRAM_SAFE_FROM_EZFLASH AT>ROM
     _ramtext_vma_begin = ADDR(.text.ram);
@@ -40,6 +40,7 @@ SECTIONS {
     _ramrodata_lma_end = LOADADDR(.rodata.ram) + SIZEOF(.rodata.ram);
 
     .data.ram : {
+        *(.data);
         KEEP(*(.data.ram*))
         . = ALIGN(4);
     } >EWRAM_SAFE_FROM_EZFLASH AT>ROM
@@ -53,11 +54,6 @@ SECTIONS {
     _ramsave_crc_location = _ramsave_area_begin - 0x04;
     _ramsave_len_location = _ramsave_area_begin - 0x08;
     _magic_location = _ramsave_area_begin - 0x10;
-
-    .data : { 
-        *(.data);
-        . = ALIGN(4);
-    } >IWRAM AT>ROM
 
     .bss : {
         *(.bss); 

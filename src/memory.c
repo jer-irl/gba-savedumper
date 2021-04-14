@@ -2,10 +2,24 @@
 
 #include "common.h"
 
-void memcpy16_naive(uint16_t * dst, const uint16_t * src, const uint32_t len) {
+void memcpy8_naive(volatile uint8_t * const dst, const volatile uint8_t * const src, const uint32_t len) {
+    for (uint32_t i = 0; i < len; ++i) {
+        dst[i] = src[i];
+    }
+}
+
+void memcpy16_naive(volatile uint16_t * const dst, const volatile uint16_t * const src, const uint32_t len) {
     for (uint32_t i = 0; i < len / 2; ++i) {
         dst[i] = src[i];
     }
+}
+
+uint32_t nulltermcpy8_naive(volatile uint8_t * const dst, const volatile uint8_t * const src) {
+    uint32_t i = 0;
+    do {
+        dst[i] = src[i];
+    } while (src[i++] != '\0');
+    return i;
 }
 
 const uint32_t * scan_memory32(const uint8_t * const pattern, const uint32_t * const search_begin, const uint32_t * const search_end) {
