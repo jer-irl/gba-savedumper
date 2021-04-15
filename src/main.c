@@ -102,17 +102,17 @@ void handle_oem_cart_inserted_gamepak(const enum InterruptFlag interrupt) {
     on_oem_cart_inserted();
 }
 
-extern uint32_t * const _ramsave_area_begin;
-extern uint32_t * const _ramsave_area_end;
-extern uint32_t * const _ramsave_len_location;
-extern uint32_t * const _ramsave_crc_location;
+extern uint32_t _ramsave_area_begin;
+extern uint32_t _ramsave_area_end;
+extern uint32_t _ramsave_len_location;
+extern uint32_t _ramsave_crc_location;
 void on_oem_cart_inserted() {
     m3_log_inline("Beginning rip of save to RAM");
-    const uint32_t len_ripped = rip_save_to_ram(_ramsave_area_begin, (uint32_t) _ramsave_area_end - (uint32_t) _ramsave_area_begin);
-    *_ramsave_len_location = len_ripped;
+    const uint32_t len_ripped = rip_save_to_ram(&_ramsave_area_begin, ((uint32_t) &_ramsave_area_end) - ((uint32_t) &_ramsave_area_begin));
+    _ramsave_len_location = len_ripped;
 
-    const uint32_t crc = get_crc(_ramsave_area_begin, len_ripped);
-    *_ramsave_crc_location = crc;
+    const uint32_t crc = get_crc(&_ramsave_area_begin, len_ripped);
+    _ramsave_crc_location = crc;
 
     install_interrupt_handler(IRQ_GAMEPAK, handle_oem_cart_removed);
     m3_log_inline("Done ripping, remove the OEM cartridge now.");
@@ -190,15 +190,15 @@ void main_hot_reboot() {
 }
 
 void on_flash_cart_reinserted_and_reloaded() {
-    const uint32_t save_len = *_ramsave_len_location;
-    const uint32_t crc = *_ramsave_crc_location;
-    if (get_crc(_ramsave_area_begin, save_len) != crc) {
+    const uint32_t save_len = _ramsave_len_location;
+    const uint32_t crc = _ramsave_crc_location;
+    if (get_crc(&_ramsave_area_begin, save_len) != crc) {
         m3_log_inline("crc check failed, reboot overwrote some important memory");
         panic();
     }
 
     m3_log_inline("Dumping save");
-    dump_ram_to_sram(_ramsave_area_begin, save_len);
+    dump_ram_to_sram(&_ramsave_area_begin, save_len);
     
     m3_log_inline("All done!");
 }

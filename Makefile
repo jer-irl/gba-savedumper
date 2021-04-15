@@ -28,6 +28,7 @@ CC_OBJECTS = \
 	$(BUILD)/keypad.o \
 	$(BUILD)/mgba.o \
 	$(BUILD)/main.o \
+	$(BUILD)/gamedb.o \
 	$(BUILD)/common.o
 
 LDSCRIPT = src/linker.ld

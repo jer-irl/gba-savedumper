@@ -90,7 +90,7 @@ void master_isr() {
                 "bx %[rhandler_addr]\n"
                 :
                 : [rhandler_addr] "r" (entry->handler), [rinterrupts] "r" (received_interrupts)
-                : "r0", "r1", "r2", "r3", "lr", "pc"
+                : "r0", "r1", "r2", "r3", "lr", "pc", "memory"
             );
         }
     }

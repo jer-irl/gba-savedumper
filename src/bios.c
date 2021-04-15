@@ -17,8 +17,8 @@ struct bios_div_result bios_div(const int32_t numerator, const int32_t denominat
 
 void bios_halt() {
     while (true) {
-        asm volatile (
-            "swi 0x02"
-        );
+        // asm volatile (
+        //     "swi 0x02"
+        // );
     }
 }

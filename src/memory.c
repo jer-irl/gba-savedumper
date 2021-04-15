@@ -1,6 +1,7 @@
 #include "memory.h"
 
 #include "common.h"
+#include "logging.h"
 
 void memcpy8_naive(volatile uint8_t * const dst, const volatile uint8_t * const src, const uint32_t len) {
     for (uint32_t i = 0; i < len; ++i) {
@@ -47,4 +48,26 @@ bool streq8(const uint8_t * const pattern, const uint8_t * const comparison) {
     }
 
     return true;
+}
+
+void dma_copy(
+    const uint32_t channel, 
+    void * const destination, 
+    const void * const source, 
+    const enum DmaControlFlags control, 
+    const uint16_t num_transfers)
+{
+    if (channel > 3) {
+        m3_log_inline("Invalid dma channel value");
+        panic();
+        return;
+    }
+    volatile uint32_t * const REG_DMA_CONTROL = (uint32_t *)(0x040000b8 + (0x0c * channel));
+    volatile uint32_t const * * const REG_DMA_SOURCE = (const volatile uint32_t * *) (0x040000b0 + (0x0c * channel));
+    volatile uint32_t * * const REG_DMA_DESTINATION = (volatile uint32_t * *) (0x040000b4 + (0x0c * channel));
+
+    *REG_DMA_CONTROL = 0;
+    *REG_DMA_SOURCE = (const uint32_t *) source;
+    *REG_DMA_DESTINATION = (uint32_t *) destination;
+    *REG_DMA_CONTROL = control | num_transfers;
 }

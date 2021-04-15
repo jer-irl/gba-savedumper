@@ -17,7 +17,7 @@ SECTIONS {
     } >ROM
 
     .rodata : { 
-        *(.rodata .rodata.rom); 
+        *(.rodata.rom); 
         . = ALIGN(4);
     } >ROM
 
@@ -31,6 +31,7 @@ SECTIONS {
     _ramtext_lma_end = LOADADDR(.text.ram) + SIZEOF(.text.ram);
 
     .rodata.ram : { 
+        *(.rodata)
         KEEP(*(.rodata.ram))
         . = ALIGN(4);
     } >EWRAM_SAFE_FROM_EZFLASH AT>ROM
