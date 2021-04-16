@@ -17,7 +17,7 @@ void set_magic() {
 __attribute__((noreturn)) void panic() {
     m3_log_inline("Unrecoverable error");
     while (true) {
-        bios_halt();
+        // bios_halt();
     }
 }
 

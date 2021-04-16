@@ -20,6 +20,8 @@ EWRAM_RODATA static const uint32_t M3_PAGE_LEN = 0x12c00;
 EWRAM_RODATA static const uint16_t M3_VIDEO_MODE_VALUE = 0x403;
 
 EWRAM_RODATA static volatile uint16_t * const REG_DISPCNT = (uint16_t *) 0x04000000;
+EWRAM_RODATA static volatile uint16_t * const REG_DISPSTAT = (uint16_t *) 0x04000004;
+//EWRAM_RODATA static volatile uint16_t * const REG_VCOUNT = (uint16_t *) 0x04000006;
 
 EWRAM_CODE THUMB static void m3_putc(char c, uint8_t glyph_row_idx, uint8_t glyph_col_idx);
 EWRAM_CODE THUMB static uint32_t strlen_naive(const char *s);
@@ -64,6 +66,7 @@ void m3_log(const char *s) {
     const uint32_t copy_len = (uint32_t)((uint8_t *) M3_PAGE_ADDR + M3_PAGE_LEN) - (uint32_t)(src);
     memcpy16_naive(dst, src, copy_len);
     m3_puts(s, M3_GLYPH_ROWS - rows_required);
+    while ((*REG_DISPSTAT & 0b1) == 0) {}
 }
 
 uint32_t strlen_naive(const char * const s) {

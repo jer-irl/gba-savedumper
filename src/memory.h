@@ -22,8 +22,8 @@ enum DmaControlFlags {
 
     DMA_REPEAT = 0b1 << 0x19,
 
-    DMA_16_BIT = 0b1 << 0x1a,
-    DMA_32_BIT = 0b0 << 0x1a,
+    DMA_16_BIT = 0b0 << 0x1a,
+    DMA_32_BIT = 0b1 << 0x1a,
 
     DMA_TIMING_NOW = 0b00 << 0x1c,
     DMA_TIMING_VBLANK = 0b01 << 0x1c,

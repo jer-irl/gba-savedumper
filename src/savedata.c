@@ -1,5 +1,6 @@
 #include "savedata.h"
 
+#include "bios.h"
 #include "common.h"
 #include "gamedb.h"
 #include "keypad.h"
@@ -14,6 +15,12 @@ EWRAM_CODE THUMB static enum SaveType prompt_cart_savetype();
 EWRAM_CODE THUMB static enum SaveType detect_cart_savetype();
 
 EWRAM_CODE THUMB static void flash_swap_bank(uint32_t target_bank);
+
+EWRAM_CODE THUMB static void eeprom_read(uint8_t * destination, uint32_t starting_block, uint32_t num_blocks, uint32_t eeprom_size_bytes);
+EWRAM_CODE THUMB static void eeprom_read_block(uint8_t * destination, uint32_t source_block, uint32_t eeprom_size_bytes);
+EWRAM_CODE THUMB static void eeprom_read_block512(uint8_t * destination, uint32_t source_block);
+EWRAM_CODE THUMB static void eeprom_read_block8k(uint8_t * destination, uint32_t source_block);
+EWRAM_CODE THUMB static uint32_t eeprom_detect_size_bytes();
 
 uint32_t rip_save_to_ram(uint32_t * const destination, const uint32_t max_size) {
     uint32_t ripped_len = 0;
@@ -38,31 +45,40 @@ uint32_t rip_save_to_ram(uint32_t * const destination, const uint32_t max_size) 
             break;
         case SAV_EEPROM:
             m3_log_inline("Ripping EEPROM save unknown size");
-            m3_log_inline("Unimplemented");
+            {
+                const uint32_t eeprom_size = eeprom_detect_size_bytes();
+                if (eeprom_size == 0x0200) {
+                    goto SAV_EEPROM_512_LABEL;
+                }
+                else if (eeprom_size == 0x2000) {
+                    goto SAV_EEPROM_8k_LABEL;
+                }
+            }
+            m3_log_inline("Failed to detect EEPROM size");
             panic();
             break;
 
         case SAV_EEPROM_512:
+        SAV_EEPROM_512_LABEL:
             m3_log_inline("Ripping EEPROM 512 save");
             ripped_len = 0x0200;
             if (ripped_len > max_size) {
                 m3_log_inline("Not enough space to rip save from EEPROM 512");
                 panic();
             }
-            m3_log_inline("Unimplemented");
-            panic();
+            eeprom_read((uint8_t *) destination, 0, 0x40, ripped_len);
             break;
 
-        case SAV_EEPROM_8k:
-        case SAV_EEPROM_8k_v125_v126:
+        case SAV_EEPROM_8k: 
+        case SAV_EEPROM_8k_v125_v126: 
+        SAV_EEPROM_8k_LABEL:
             m3_log_inline("Ripping EEPROM 8k save");
             ripped_len = 0x2000;
             if (ripped_len > max_size) {
                 m3_log_inline("Not enough space to rip save from EEPROM ik");
                 panic();
             }
-            m3_log_inline("Unimplemented");
-            panic();
+            eeprom_read((uint8_t *) destination, 0, 0x400, ripped_len);
             break;
 
         case SAV_FLASH:
@@ -186,4 +202,92 @@ void flash_swap_bank(const uint32_t target_bank) {
     *(volatile uint8_t *) 0x0e002aaa = 0x55;
     *(volatile uint8_t *) 0x0e005555 = 0xb0;
     *(volatile uint8_t *) 0x0e000000 = target_bank;
+}
+
+void eeprom_read(uint8_t * const destination, const uint32_t starting_block, const uint32_t num_blocks, const uint32_t eeprom_size_bytes) {
+    for (uint32_t i = 0; i < num_blocks; ++i) {
+        eeprom_read_block(destination + (8 * i), starting_block + i, eeprom_size_bytes);
+    }
+}
+
+void eeprom_read_block(uint8_t * const destination, const uint32_t source_block, const uint32_t eeprom_size_bytes) {
+    if (eeprom_size_bytes == 0x0200) {
+        eeprom_read_block512(destination, source_block);
+    }
+    else if (eeprom_size_bytes == 0x2000) {
+        eeprom_read_block8k(destination, source_block);
+    }
+    else {
+        m3_log_inline("Invalid eeprom size");
+        panic();
+    }
+}
+
+void eeprom_read_block512(uint8_t * const destination, const uint32_t source_block) {
+    uint16_t command_buffer[9];
+    command_buffer[0] = 0b1;
+    command_buffer[1] = 0b1;
+    command_buffer[2] = source_block >> 5;
+    command_buffer[3] = source_block >> 4;
+    command_buffer[4] = source_block >> 3;
+    command_buffer[5] = source_block >> 2;
+    command_buffer[6] = source_block >> 1;
+    command_buffer[7] = source_block >> 0;
+    command_buffer[8] = 0b0;
+
+    dma_copy(3, (void *) 0x0d000000, &command_buffer, DMA_16_BIT | DMA_TIMING_NOW | DMA_ENABLE | DMA_DESTINATION_INCREMENT | DMA_SOURCE_INCREMENT, 9);
+
+    uint16_t result_buffer[68];
+    dma_copy(3, &result_buffer, (void *) 0x0d000000, DMA_16_BIT | DMA_TIMING_NOW | DMA_ENABLE | DMA_DESTINATION_INCREMENT | DMA_SOURCE_INCREMENT, 68);
+
+    for (uint32_t i = 4; i < 68; ++i) {
+        const uint32_t bit_idx = i - 4;
+        const uint32_t byte_idx = bios_div(bit_idx, 8).div;
+        destination[byte_idx] = (destination[byte_idx] << 1) | (result_buffer[i] & 0b1);
+    }
+}
+
+void eeprom_read_block8k(uint8_t * const destination, const uint32_t source_block) {
+    uint16_t command_buffer[17];
+    command_buffer[0] = 0b1;
+    command_buffer[1] = 0b1;
+    command_buffer[2] = source_block >> 13;
+    command_buffer[3] = source_block >> 12;
+    command_buffer[4] = source_block >> 11;
+    command_buffer[5] = source_block >> 10;
+    command_buffer[6] = source_block >> 9;
+    command_buffer[7] = source_block >> 8;
+    command_buffer[8] = source_block >> 7;
+    command_buffer[9] = source_block >> 6;
+    command_buffer[10] = source_block >> 5;
+    command_buffer[11] = source_block >> 4;
+    command_buffer[12] = source_block >> 3;
+    command_buffer[13] = source_block >> 2;
+    command_buffer[14] = source_block >> 1;
+    command_buffer[15] = source_block >> 0;
+    command_buffer[16] = 0b0;
+
+    dma_copy(3, (void *) 0x0d000000, &command_buffer, DMA_16_BIT | DMA_TIMING_NOW | DMA_ENABLE | DMA_DESTINATION_INCREMENT | DMA_SOURCE_INCREMENT, 17);
+
+    uint16_t result_buffer[68];
+    dma_copy(3, &result_buffer, (void *) 0x0d000000, DMA_16_BIT | DMA_TIMING_NOW | DMA_ENABLE | DMA_DESTINATION_INCREMENT | DMA_SOURCE_INCREMENT, 68);
+
+    for (uint32_t i = 4; i < 68; ++i) {
+        const uint32_t bit_idx = i - 4;
+        const uint32_t byte_idx = bios_div(bit_idx, 8).div;
+        destination[byte_idx] = (destination[byte_idx] << 1) | (result_buffer[i] & 0b1);
+    }
+}
+
+uint32_t eeprom_detect_size_bytes() {
+    switch (lookup_rom_savetype()) {
+        case SAV_EEPROM_512:
+            return 0x0200;
+        case SAV_EEPROM_8k:
+        case SAV_EEPROM_8k_v125_v126:
+            return 0x2000;
+        default:
+            m3_log_inline("EEPROM save length");
+            panic();
+    }
 }
