@@ -111,7 +111,7 @@ void on_oem_cart_inserted() {
     const uint32_t len_ripped = rip_save_to_ram(_ramsave_area_begin, ((uint32_t) &_ramsave_area_end) - ((uint32_t) &_ramsave_area_begin));
     _ramsave_len_location = len_ripped;
 
-    const uint32_t crc = get_crc(_ramsave_area_begin, len_ripped);
+    const uint32_t crc = get_checksum((const uint8_t *) _ramsave_area_begin, len_ripped);
     _ramsave_crc_location = crc;
 
     install_interrupt_handler(IRQ_GAMEPAK, handle_oem_cart_removed);
@@ -141,14 +141,10 @@ void on_oem_cart_removed() {
 void handle_flash_cart_reinserted_keypad(const enum InterruptFlag interrupt) {
     (void) interrupt;
 
-    if (!key_is_down(KEY_A)) {
-        return;
-    }
-
-    ack_interrupt(IRQ_KEYPAD);
     uninstall_interrupt_handler(handle_flash_cart_reinserted_keypad);
 
     on_flash_cart_reinserted_and_reloaded();
+    ack_interrupt(IRQ_KEYPAD);
 }
 
 void handle_flash_cart_reinserted_gamepak(const enum InterruptFlag interrupt) {
@@ -192,7 +188,7 @@ void main_hot_reboot() {
 void on_flash_cart_reinserted_and_reloaded() {
     const uint32_t save_len = _ramsave_len_location;
     const uint32_t crc = _ramsave_crc_location;
-    if (get_crc(_ramsave_area_begin, save_len) != crc) {
+    if (get_checksum((const uint8_t *)_ramsave_area_begin, save_len) != crc) {
         m3_log_inline("crc check failed, reboot overwrote some important memory");
         panic();
     }

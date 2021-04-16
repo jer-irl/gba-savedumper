@@ -109,7 +109,7 @@ void master_isr() {
     const enum InterruptFlag remaining_interrupts = *(enum InterruptFlag *) REG_IF;
     if (remaining_interrupts != IRQ_NONE) {
         m3_log_inline("Not all interrupts handled");
-        panic();
+        *REG_IF = *REG_IF;
     }
 
     // Safety

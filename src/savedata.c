@@ -3,6 +3,7 @@
 #include "bios.h"
 #include "common.h"
 #include "gamedb.h"
+#include "interrupt.h"
 #include "keypad.h"
 #include "logging.h"
 #include "memory.h"
@@ -21,6 +22,8 @@ EWRAM_CODE THUMB static void eeprom_read_block(uint8_t * destination, uint32_t s
 EWRAM_CODE THUMB static void eeprom_read_block512(uint8_t * destination, uint32_t source_block);
 EWRAM_CODE THUMB static void eeprom_read_block8k(uint8_t * destination, uint32_t source_block);
 EWRAM_CODE THUMB static uint32_t eeprom_detect_size_bytes();
+
+EWRAM_CODE THUMB static void clear_keypad_interrupt_once(enum InterruptFlag);
 
 uint32_t rip_save_to_ram(uint32_t * const destination, const uint32_t max_size) {
     uint32_t ripped_len = 0;
@@ -135,6 +138,8 @@ enum SaveType get_savetype() {
 enum SaveType prompt_cart_savetype() {
     m3_log_inline("If save type of oem cart is known, then press A, otherwise press B");
 
+    install_interrupt_handler(IRQ_KEYPAD, clear_keypad_interrupt_once);
+
     while (!any_key_is_down()) {}
 
     if (key_is_down(KEY_B)) {
@@ -195,6 +200,15 @@ enum SaveType detect_cart_savetype() {
         return SAV_FLASH512;
     }
     return SAV_UNKNOWN;
+}
+
+void clear_keypad_interrupt_once(const enum InterruptFlag interrupt) {
+    if ((interrupt & IRQ_KEYPAD) == 0) {
+        return;
+    }
+
+    ack_interrupt(IRQ_KEYPAD);
+    uninstall_interrupt_handler(clear_keypad_interrupt_once);
 }
 
 void flash_swap_bank(const uint32_t target_bank) {
