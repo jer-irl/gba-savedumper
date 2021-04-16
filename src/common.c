@@ -6,6 +6,8 @@
 // From linker
 extern volatile uint32_t * const _magic_location;
 
+EWRAM_RODATA const uint8_t CHECKSUM_SEED = 0b10001001;
+
 bool magic_present() {
     return *_magic_location == 0xdeadbeef;
 }
@@ -21,10 +23,10 @@ __attribute__((noreturn)) void panic() {
     }
 }
 
-uint32_t get_crc(const uint32_t * const source, const uint32_t length) {
-    m3_log_inline("Unimplemented");
-    (void) source;
-    (void) length;
-    panic();
-    return 0;
+uint8_t get_checksum(const uint8_t * const source, const uint32_t length_bytes) {
+    uint8_t result = CHECKSUM_SEED;
+    for (uint32_t i = 0; i < length_bytes; ++i) {
+        result ^= source[i];
+    }
+    return result;
 }
