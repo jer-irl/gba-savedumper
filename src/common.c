@@ -4,16 +4,16 @@
 #include "logging.h"
 
 // From linker
-extern volatile uint32_t * const _magic_location;
+extern volatile uint32_t _magic_location;
 
 EWRAM_RODATA const uint8_t CHECKSUM_SEED = 0b10001001;
 
 bool magic_present() {
-    return *_magic_location == 0xdeadbeef;
+    return _magic_location == 0xdeadbeef;
 }
 
 void set_magic() {
-    *_magic_location = 0xdeadbeef;
+    _magic_location = 0xdeadbeef;
 }
 
 __attribute__((noreturn)) void panic() {

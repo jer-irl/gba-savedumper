@@ -17,9 +17,8 @@ enum KeypadValues {
     KEY_L = 1 << 9,
 };
 
-EWRAM_CODE THUMB void init_keypad();
 EWRAM_CODE THUMB bool any_key_is_down();
 EWRAM_CODE THUMB bool key_is_down(enum KeypadValues);
-EWRAM_CODE THUMB bool key_caused_interrupt(enum KeypadValues);
+EWRAM_CODE THUMB enum KeypadValues keypress_await(enum KeypadValues);
 
 #endif // GBA_KEYPAD_H
