@@ -3,11 +3,16 @@
 This project has evolved over time, but most recently the goal is to create an on-GBA Pokemon Gen III save editor.
 Continue on for a short history.
 
+This is a personal learning project, and non-goals include
+
+- Performance (currently compiling with -O0)
+- Elegance and best practices (I'm still learning as I go)
+
 ## History of the Project
 
 I was fortunate enough to have a 6 month gap before starting a new job during which I was able to pursue personal projects.
 As a young Millenial born in 1995, to scratch a nostalgia itch I started digging into the Gameboy Advance as a development platform.
-I have some WIP blog posts that may be posted one day over at [https://jeresch.github.io], but in summary, it's a really cool platform for somebody who has mostly programmed for beefy Linux servers.
+I have some WIP blog posts that may be posted one day over at [https://jeresch.github.io](https://jeresch.github.io), but in summary, it's a really cool platform for somebody who has mostly programmed for beefy Linux servers.
 
 ### Original Goals
 
@@ -17,8 +22,8 @@ So, I set out to dump save data from my old childhood game cartridges, and back 
 
 NOTE: This is possible already with custom hardware, or with a Nintendo DS or DS Lite.  Check out the following links.
 
-- [https://digiex.net/threads/gba-backup-tool-backup-gba-saves-dump-a-gameboy-advanced-rom-using-a-nintendo-ds.9921/]
-- [https://projectpokemon.org/home/forums/topic/41730-managing-gba-saves-using-gba-backup-tool/]
+- [homebrew app](https://digiex.net/threads/gba-backup-tool-backup-gba-saves-dump-a-gameboy-advanced-rom-using-a-nintendo-ds.9921/)
+- [tutorial](https://projectpokemon.org/home/forums/topic/41730-managing-gba-saves-using-gba-backup-tool/)
 
 But what about the nostalgic everyman who doesn't own a DS or custom hardware?
 That's who I set out to help.
@@ -91,3 +96,5 @@ Other tasks are mostly related to documentation, originally planned for my empty
 - [ ] Document interrupts
 - [ ] Document used BIOS functionality
 - [ ] Document DMA
+- [ ] Document ARM vs THUMB and this applicatioon's tradeoffs.
+- [ ] Add some fun links
