@@ -1,4 +1,4 @@
-PROJECT = asteroids
+PROJECT = gba-save
 TARGET = $(PROJECT).gba
 
 BUILD = build
@@ -13,7 +13,7 @@ OBJCOPY = arm-none-eabi-objcopy
 
 CFLAGS = -c -g -O0 -Wall -Wextra -Werror -mthumb -mthumb-interwork -mcpu=$(CPU) -mtune=$(CPU) -ffast-math -fomit-frame-pointer -std=gnu11
 ASFLAGS = -c -mthumb -mthumb-interwork -g
-LDFLAGS = -g -Map=$(BUILD)/asteroids.map
+LDFLAGS = -g -Map=$(BUILD)/$(PROJECT).map
 
 AS_OBJECTS = \
 	$(BUILD)/entry.o
@@ -51,12 +51,6 @@ $(AS_OBJECTS): $(BUILD)/%.o: src/%.s
 $(CC_OBJECTS): $(BUILD)/%.o: src/%.c
 	$(CC) -o $@ $(CFLAGS) $<
 
-dockerbuild:
-	docker build --tag asteroids-gba/build --file docker/Dockerfile.build docker
-	docker run --rm --mount type=bind,src=$(shell pwd),dst=/project asteroids-gba/build
-
-
 .PHONY: clean
 clean:
 	rm -rf $(BUILD)
-	if docker image inspect asteroids-gba/build >/dev/null 2>&1; then docker rmi asteroids-gba/build; fi

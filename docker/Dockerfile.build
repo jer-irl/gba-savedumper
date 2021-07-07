@@ -1,9 +1,0 @@
-FROM ubuntu:20.04
-
-VOLUME ["/project"]
-WORKDIR /project
-
-RUN apt-get update && apt-get upgrade -y
-RUN apt-get install -y build-essential gcc-arm-none-eabi
-
-ENTRYPOINT ["make"]
