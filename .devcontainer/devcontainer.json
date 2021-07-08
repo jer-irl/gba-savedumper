@@ -12,7 +12,9 @@
 	"extensions": [
 		"llvm-vs-code-extensions.vscode-clangd",
 		"gruntfuggly.todo-tree",
-		"davidanson.vscode-markdownlint"
+		"davidanson.vscode-markdownlint",
+		"dan-c-underwood.arm",
+		"streetsidesoftware.code-spell-checker"
 	],
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.

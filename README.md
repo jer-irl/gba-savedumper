@@ -60,6 +60,7 @@ This should be feasible and device RAM is large enough, but this wasn't a simple
 Much of the development of this project was done in emulators, particularly mgba.
 However, these projects generally focus on getting pirated games playable on unofficial hardware, rather than actually emulating hardware details relevant only to oddball projects.
 I had to include some hacks to "trick" mgba to allow development, and swapping ROM in the emulator was not easy.
+Please [see my writeup](/writeups/mgba-hacks.md) for more information.
 
 The GBA has no concept of a console or of text.
 Any logging, interaction, fonts, etc has to be built from the ground up, with hardware constraints in mind.
@@ -88,7 +89,7 @@ This will require implementing some Pokemon-specific code, but should be satisfy
 Other tasks are mostly related to documentation, originally planned for my empty blog, but I think I'll put them here instead.
 
 - [ ] Inline documentation
-- [ ] Document mgba challenges and hacks
+- [x] Document mgba challenges and hacks
 - [ ] Document graphics hardware and modes
 - [ ] Document save media interaction
 - [ ] Document code relocation and linker scripts
