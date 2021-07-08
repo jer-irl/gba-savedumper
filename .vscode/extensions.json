@@ -1,0 +1,13 @@
+{
+	"recommendations": [
+		"llvm-vs-code-extensions.vscode-clangd",
+		"gruntfuggly.todo-tree",
+		"davidanson.vscode-markdownlint",
+		"dan-c-underwood.arm",
+		"streetsidesoftware.code-spell-checker",
+	],
+	"unwantedRecommendations": [
+		"austin.code-gnu-global",
+		"ms-vscode.cpptools-extension-pack",
+	]
+}

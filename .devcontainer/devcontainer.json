@@ -9,13 +9,7 @@
 
 
 	// Add the IDs of extensions you want installed when the container is created.
-	"extensions": [
-		"llvm-vs-code-extensions.vscode-clangd",
-		"gruntfuggly.todo-tree",
-		"davidanson.vscode-markdownlint",
-		"dan-c-underwood.arm",
-		"streetsidesoftware.code-spell-checker"
-	],
+	"extensions": [],
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [],
