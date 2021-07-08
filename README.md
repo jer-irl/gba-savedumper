@@ -97,5 +97,5 @@ Other tasks are mostly related to documentation, originally planned for my empty
 - [ ] Document interrupts
 - [ ] Document used BIOS functionality
 - [ ] Document DMA
-- [ ] Document ARM vs THUMB and this applicatioon's tradeoffs.
+- [ ] Document ARM vs THUMB and this application's tradeoffs.
 - [ ] Add some fun links

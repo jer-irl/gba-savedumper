@@ -47,7 +47,7 @@ end_header:
 .align 2
 .asciz "SRAM_Vnnn"
 
-.extern gba_main
+.extern main
 
 .align 2
 .set IRQ_MODE, 0x12

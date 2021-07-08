@@ -13,7 +13,7 @@ extern uint32_t _ramsave_len_location;
 extern uint32_t _ramsave_crc_location;
 
 __attribute__((noreturn))
-EWRAM_CODE THUMB int gba_main() {
+EWRAM_CODE THUMB void gba_main() {
     m3_init();
     m3_clr();
     m3_log_inline("Welcome");

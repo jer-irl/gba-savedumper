@@ -1,8 +1,11 @@
-PROJECT = gba-save
-TARGET = $(PROJECT).gba
+PROJECTS = gba-savedump gba-saveedit
+ROMS = $(addsuffix .gba,$(PROJECTS))
+ELFS = $(addsuffix .elf,$(PROJECTS))
 
-BUILD = build
-SRC = src
+BUILDDIR = build
+TARGET_ROMS = $(addprefix $(BUILDDIR)/,$(ROMS))
+TARGET_ELFS = $(addprefix $(BUILDDIR)/,$(ELFS))
+
 TRIPLE = arm-none-eabi
 CPU = arm7tdmi
 
@@ -11,46 +14,47 @@ LD = arm-none-eabi-ld
 AS = arm-none-eabi-as
 OBJCOPY = arm-none-eabi-objcopy
 
-CFLAGS = -c -g -O0 -Wall -Wextra -Werror -mthumb -mthumb-interwork -mcpu=$(CPU) -mtune=$(CPU) -ffast-math -fomit-frame-pointer -std=gnu11
+CFLAGS = -c -g -O0 -Wall -Wextra -Werror -mthumb -mthumb-interwork -mcpu=$(CPU) -mtune=$(CPU) -ffast-math -fomit-frame-pointer -std=gnu11 -Iinclude
 ASFLAGS = -c -mthumb -mthumb-interwork -g
-LDFLAGS = -g -Map=$(BUILD)/$(PROJECT).map
+ARFLAGS = -crs
+LDFLAGS = -g -Lbuild/
 
-AS_OBJECTS = \
-	$(BUILD)/entry.o
-
-CC_OBJECTS = \
-	$(BUILD)/logging.o \
-	$(BUILD)/bios.o \
-	$(BUILD)/memory.o \
-	$(BUILD)/data.o \
-	$(BUILD)/interrupt.o \
-	$(BUILD)/savedata.o \
-	$(BUILD)/keypad.o \
-	$(BUILD)/mgba.o \
-	$(BUILD)/main.o \
-	$(BUILD)/gamedb.o \
-	$(BUILD)/common.o
-
-LDSCRIPT = src/linker.ld
+LDSCRIPT = scripts/linker.ld
+LIB_SRCS = $(wildcard lib/*.c lib/*.s)
+LIB_OBJS = $(addprefix $(BUILDDIR)/,$(subst .c,.o,$(subst .s,.o,$(LIB_SRCS))))
 
 
-all: mkbuilddir $(BUILD)/$(TARGET)
+.PHONY: all
+all: $(TARGET_ROMS) | $(BUILDDIR)
 
-mkbuilddir:
-	mkdir -p $(BUILD)
+$(BUILDDIR): $(BUILDDIR)/
 
-$(BUILD)/$(TARGET): $(BUILD)/$(TARGET).elf
+$(BUILDDIR)/:
+	mkdir -p $(BUILDDIR)
+
+$(TARGET_ROMS): %.gba: %.elf | $(BUILDDIR)
 	$(OBJCOPY) -O binary $< $@
 
-$(BUILD)/$(TARGET).elf: $(LDSCRIPT) $(AS_OBJECTS) $(CC_OBJECTS)
-	$(LD) -o $@ $(LDFLAGS) -T$^
+define app_dependencies
 
-$(AS_OBJECTS): $(BUILD)/%.o: src/%.s
+endef
+
+.SECONDEXPANSION:
+$(TARGET_ELFS): $(BUILDDIR)/%.elf: $(LDSCRIPT) $(LIB_OBJS) $(BUILDDIR)/%/$$(subst .c,.o,$$(shell ls apps/%))
+	$(LD) -o $@ $(LDFLAGS) -Map=$(basename $@).map -T$^
+
+$(BUILDDIR)/%.o: %.s
+	mkdir -p $(@D)
 	$(AS) -o $@ $(ASFLAGS) $<
 
-$(CC_OBJECTS): $(BUILD)/%.o: src/%.c
+$(BUILDDIR)/%.o: %.c
+	mkdir -p $(@D)
+	$(CC) -o $@ $(CFLAGS) $<
+
+$(BUILDDIR)/%.o: apps/%.c
+	mkdir -p $(@D)
 	$(CC) -o $@ $(CFLAGS) $<
 
 .PHONY: clean
 clean:
-	rm -rf $(BUILD)
+	rm -rf $(BUILDDIR)

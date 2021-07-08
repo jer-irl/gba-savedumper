@@ -5,5 +5,5 @@
 -mcpu=arm7tdmi
 -ffast-math
 -fomit-frame-pointer
--Isrc
+-Iinclude
 -std=gnu11
